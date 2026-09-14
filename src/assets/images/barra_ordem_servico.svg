@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 64" width="800" height="64">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0a0a0c" />
+      <stop offset="50%" stop-color="#121216" />
+      <stop offset="100%" stop-color="#08080a" />
+    </linearGradient>
+    <pattern id="carbonPattern" width="6" height="6" patternUnits="userSpaceOnUse">
+      <rect width="6" height="6" fill="#0c0c0e" />
+      <circle cx="1.5" cy="1.5" r="0.8" fill="#18181c" />
+      <circle cx="4.5" cy="4.5" r="0.8" fill="#18181c" />
+    </pattern>
+    <clipPath id="borderClip">
+      <rect x="1" y="1" width="798" height="62" rx="14" />
+    </clipPath>
+  </defs>
+
+  <!-- Outer pill background & border -->
+  <rect x="1.5" y="1.5" width="797" height="61" rx="14" fill="url(#carbonPattern)" stroke="#e00613" stroke-width="2.5" />
+
+  <g clip-path="url(#borderClip)">
+    <!-- Slanted Red Wedge with Wrench -->
+    <!-- Top left corner rounded, slanted right edge at x=78 top, x=58 bottom -->
+    <path d="M 0 0 L 82 0 L 60 64 L 0 64 Z" fill="#e00613" />
+
+    <!-- White Wrench Icon (Chave de Boca 45deg) -->
+    <g transform="translate(38, 32) rotate(42) scale(0.95)">
+      <!-- Wrench Handle with hole -->
+      <path d="M -5 18 L 5 18 L 4.5 -6 L -4.5 -6 Z" fill="#ffffff" />
+      <circle cx="0" cy="14" r="2.2" fill="#e00613" />
+      <!-- Rounded end of handle -->
+      <path d="M -5 18 C -5 22 5 22 5 18 Z" fill="#ffffff" />
+      <!-- Open jaw head at top -->
+      <path d="M -11 -6 C -12 -16 12 -16 11 -6 C 8 -5 6 -1 5 -6 C 4 -11 -4 -11 -5 -6 C -6 -1 -8 -5 -11 -6 Z" fill="#ffffff" />
+    </g>
+
+    <!-- ORDEM DE SERVIÇO bold italic text -->
+    <text x="96" y="44" fill="#ffffff" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-style="italic" font-size="29" letter-spacing="1.5px">ORDEM DE SERVIÇO</text>
+
+    <!-- Slanted White Number Badge -->
+    <!-- Sheared trapezoid: top x=495 to 640, bottom x=475 to 620 -->
+    <path d="M 495 8 L 642 8 L 624 56 L 477 56 Z" fill="#ffffff" rx="4" />
+    <text x="558" y="41" fill="#000000" font-family="Arial Black, sans-serif" font-weight="900" font-size="22" text-anchor="middle" letter-spacing="0.5px">Nº 000125</text>
+
+    <!-- Thin White Vertical Separator Line -->
+    <line x1="660" y1="12" x2="660" y2="52" stroke="#ffffff" stroke-width="1.5" stroke-opacity="0.6" />
+
+    <!-- Calendar Icon & Date of Emission -->
+    <!-- Calendar icon outline -->
+    <g transform="translate(674, 18)">
+      <rect x="0" y="3" width="24" height="23" rx="4" fill="none" stroke="#ffffff" stroke-width="2.2" />
+      <line x1="0" y1="10" x2="24" y2="10" stroke="#ffffff" stroke-width="1.8" />
+      <!-- 2 rings at top -->
+      <line x1="5" y1="0" x2="5" y2="4" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" />
+      <line x1="19" y1="0" x2="19" y2="4" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" />
+      <!-- dots inside calendar -->
+      <rect x="4.5" y="14" width="3" height="3" fill="#ffffff" />
+      <rect x="10.5" y="14" width="3" height="3" fill="#ffffff" />
+      <rect x="16.5" y="14" width="3" height="3" fill="#ffffff" />
+      <rect x="7.5" y="19" width="3" height="3" fill="#ffffff" />
+      <rect x="13.5" y="19" width="3" height="3" fill="#ffffff" />
+    </g>
+
+    <!-- Date Text -->
+    <text x="706" y="27" fill="#ffffff" font-family="sans-serif" font-weight="800" font-size="9" letter-spacing="0.8px">DATA DE EMISSÃO</text>
+    <text x="706" y="46" fill="#ffffff" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="16" letter-spacing="0.5px">11/09/2025</text>
+  </g>
+</svg>

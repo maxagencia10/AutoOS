@@ -1,0 +1,6 @@
+{
+  "name": "AutoOS - Sistema de Ordem de Serviço",
+  "description": "Sistema profissional de Ordem de Serviço para oficinas mecânicas com controle de clientes, veículos, quilometragem, orçamento, impressão A4 profissional e persistência em PostgreSQL.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

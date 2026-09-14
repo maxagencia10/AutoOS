@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+  
+  /* Print layout strictly optimized for A4 document */
+  @media print {
+    @page {
+      size: A4 portrait;
+      margin: 4mm 6mm;
+    }
+    html, body {
+      background: #ffffff !important;
+      color: #000000 !important;
+      print-color-adjust: exact !important;
+      -webkit-print-color-adjust: exact !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      height: auto !important;
+    }
+    .no-print,
+    nav,
+    header,
+    footer,
+    aside {
+      display: none !important;
+    }
+    .print-only {
+      display: block !important;
+    }
+    .page-break-inside-avoid {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .modal-visualizacao-os {
+      position: static !important;
+      background: #ffffff !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      overflow: visible !important;
+      max-height: none !important;
+    }
+    .modal-visualizacao-os > div {
+      border: none !important;
+      box-shadow: none !important;
+      background: #ffffff !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      max-height: none !important;
+      max-width: 100% !important;
+    }
+    #documento-ordem-servico-a4 {
+      width: 100% !important;
+      max-width: 100% !important;
+      border: none !important;
+      box-shadow: none !important;
+      margin: 0 auto !important;
+      padding: 0 !important;
+    }
+  }
+
+  @media screen {
+    .print-only {
+      display: none !important;
+    }
+  }
+}
