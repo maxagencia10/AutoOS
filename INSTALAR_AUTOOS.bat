@@ -102,8 +102,18 @@ for /f "tokens=5" %%p in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING 2^
 :: 3. VERIFICAR PACOTE DE PRODUCAO OTIMIZADO
 if "%SILENT_MODE%"=="0" echo [3/4] Verificando arquivos do AutoOS...
 if not exist "%SCRIPT_DIR%dist\index.html" (
-    if "%SILENT_MODE%"=="0" echo Compilando pacote otimizado... Aguarde...
-    call npm run build >nul 2>nul
+    if "%SILENT_MODE%"=="0" (
+        echo.
+        echo [AVISO] Pasta dist nao encontrada. Compilando pacote...
+    )
+    call npm run build
+    if not exist "%SCRIPT_DIR%dist\index.html" (
+        if "%SILENT_MODE%"=="0" (
+            echo Instalando dependencias do projeto...
+            call npm install
+            call npm run build
+        )
+    )
 )
 
 :: 4. CRIAR ATALHO NA AREA DE TRABALHO
@@ -113,7 +123,7 @@ set "VBS_SHORTCUT=%TEMP%\criar_atalho_autoos.vbs"
 echo Set oWS = WScript.CreateObject("WScript.Shell") > "%VBS_SHORTCUT%"
 echo sLinkFile = oWS.SpecialFolders("Desktop") ^& "\AutoOS Oficina.lnk" >> "%VBS_SHORTCUT%"
 echo Set oLink = oWS.CreateShortcut(sLinkFile) >> "%VBS_SHORTCUT%"
-echo oLink.TargetPath = "wscript.exe" >> "%VBS_SHORTCUT%"
+echo oLink.TargetPath = "%SystemRoot%\System32\wscript.exe" >> "%VBS_SHORTCUT%"
 echo oLink.Arguments = """" ^& "%SCRIPT_DIR%AutoOS_Launcher.vbs" ^& """" >> "%VBS_SHORTCUT%"
 echo oLink.WorkingDirectory = "%SCRIPT_DIR%" >> "%VBS_SHORTCUT%"
 echo oLink.Description = "Sistema AutoOS para Oficina Mecanica" >> "%VBS_SHORTCUT%"
@@ -130,7 +140,7 @@ cscript //nologo "%VBS_SHORTCUT%" >nul 2>nul
 if exist "%VBS_SHORTCUT%" del /f /q "%VBS_SHORTCUT%"
 
 :: 5. INICIAR O SISTEMA VIA LAUNCHER EM JANELA NATIVA (SEM TELA PRETA)
-start "" wscript.exe "%SCRIPT_DIR%AutoOS_Launcher.vbs"
+start "" "%SystemRoot%\System32\wscript.exe" "%SCRIPT_DIR%AutoOS_Launcher.vbs"
 
 if "%SILENT_MODE%"=="0" (
     echo.

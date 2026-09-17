@@ -89,10 +89,27 @@ const server = http.createServer((req, res) => {
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`\n[AutoOS] ATENCAO: A porta ${PORT} ja esta sendo usada por outro processo!`);
-    console.log('[AutoOS] Fechando processos antigos e tentando novamente...');
+    console.log(`[AutoOS] A porta ${PORT} ja esta ocupada. Verificando se o AutoOS ja esta respondendo...`);
+    const testReq = http.get(`http://127.0.0.1:${PORT}/`, (res) => {
+      if (res.statusCode >= 200 && res.statusCode < 500) {
+        console.log('[AutoOS] Instancia anterior ja ativa e pronta.');
+        process.exit(0);
+      } else {
+        console.error(`[AutoOS] A porta ${PORT} esta ocupada por outra aplicacao diferente.`);
+        process.exit(1);
+      }
+    });
+    testReq.on('error', () => {
+      console.error(`[AutoOS] A porta ${PORT} esta presa. Execute CORRIGIR_TRAVAMENTO.bat.`);
+      process.exit(1);
+    });
+    testReq.setTimeout(1000, () => {
+      testReq.destroy();
+      process.exit(1);
+    });
   } else {
     console.error('[AutoOS] Erro no servidor:', err.message);
+    process.exit(1);
   }
 });
 

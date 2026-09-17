@@ -1,16 +1,24 @@
-' AutoOS Launcher - Inicializador Silencioso em Janela Nativa
-' Inicia o servidor em segundo plano (sem tela preta) e abre o AutoOS como janela de aplicativo
+' AutoOS Launcher - Inicializador Otimizado em Janela Nativa
+' Inicia o servidor em segundo plano e abre o AutoOS em janela de aplicativo
 
 Option Explicit
 
-Dim fso, wsh, currentDir, nodePath, edgePath, chromePath, appUrl, retCode
+Dim fso, wsh, currentDir, nodePath, edgePath, chromePath, appUrl, retCode, isRunning, checkCount
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set wsh = CreateObject("WScript.Shell")
 
 currentDir = fso.GetParentFolderName(WScript.ScriptFullName)
 appUrl = "http://127.0.0.1:3000"
 
-' 1. Localizar o executável do Node.js (embutido na pasta, no sistema ou no PATH)
+' 1. Verificar se a pasta dist essencial existe
+If Not fso.FileExists(currentDir & "\dist\index.html") Then
+    MsgBox "A pasta 'dist' do AutoOS não foi encontrada nesta pasta:" & vbCrLf & _
+           currentDir & vbCrLf & vbCrLf & _
+           "Por favor, execute o arquivo INSTALAR_AUTOOS.bat ou reextraia todo o conteúdo do arquivo ZIP baixado.", vbCritical, "AutoOS - Arquivos Não Encontrados"
+    WScript.Quit 1
+End If
+
+' 2. Localizar o executável do Node.js
 nodePath = ""
 If fso.FileExists(currentDir & "\runtime\node.exe") Then
     nodePath = currentDir & "\runtime\node.exe"
@@ -23,25 +31,24 @@ ElseIf fso.FileExists(wsh.ExpandEnvironmentStrings("%ProgramFiles(x86)%") & "\no
 ElseIf fso.FileExists(wsh.ExpandEnvironmentStrings("%LocalAppData%") & "\Programs\node\node.exe") Then
     nodePath = wsh.ExpandEnvironmentStrings("%LocalAppData%") & "\Programs\node\node.exe"
 Else
-    ' Testa comando node no PATH
+    ' Testa comando node no PATH do sistema silenciosamente
     On Error Resume Next
-    Dim testExec
-    Set testExec = wsh.Exec("node -v")
-    If Err.Number = 0 Then
+    retCode = wsh.Run("cmd /c where node >nul 2>nul", 0, True)
+    If retCode = 0 Then
         nodePath = "node"
     End If
     On Error GoTo 0
 End If
 
 If nodePath = "" Then
-    MsgBox "O Node.js não foi localizado para iniciar o AutoOS." & vbCrLf & _
-           "Por favor, execute o arquivo INSTALAR_AUTOOS.bat com conexão à internet " & vbCrLf & _
-           "ou coloque o instalador do Node.js na pasta do sistema.", vbCritical, "AutoOS - Erro de Inicialização"
+    MsgBox "O Node.js não foi localizado no seu computador para executar o AutoOS." & vbCrLf & vbCrLf & _
+           "Para resolver:" & vbCrLf & _
+           "1. Dê dois cliques em INSTALAR_AUTOOS.bat com conexão à internet; OU" & vbCrLf & _
+           "2. Baixe o Node.js oficial gratuito em: https://nodejs.org", vbCritical, "AutoOS - Node.js Não Encontrado"
     WScript.Quit 1
 End If
 
-' 2. Verificar se o servidor já está rodando
-Dim isRunning
+' 3. Verificar se o servidor já está rodando
 isRunning = False
 On Error Resume Next
 retCode = wsh.Run("""" & nodePath & """ """ & currentDir & "\verificar_servidor.cjs""", 0, True)
@@ -50,19 +57,18 @@ If retCode = 0 Then
 End If
 On Error GoTo 0
 
-' 3. Se não estiver rodando, inicia o servidor em segundo plano (0 = Invisível)
+' 4. Se não estiver rodando, inicia o servidor em segundo plano com log de diagnóstico
 If Not isRunning Then
-    ' Libera processos órfãos na porta 3000
+    ' Libera processos órfãos antigos na porta 3000
     wsh.Run "cmd /c ""for /f ""tokens=5"" %p in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING 2^>nul') do taskkill /F /PID %p >nul 2^>nul""", 0, True
 
-    ' Inicia o servidor do AutoOS sem exibir janela (0)
-    wsh.Run """" & nodePath & """ """ & currentDir & "\servidor.cjs""", 0, False
+    ' Inicia o servidor direcionando a saída para servidor.log
+    wsh.Run "cmd /c """"" & nodePath & """ """ & currentDir & "\servidor.cjs"" > """ & currentDir & "\servidor.log"" 2>&1""", 0, False
 
-    ' Aguarda sincronização garantida do servidor (HTTP 200)
-    Dim checkCount
+    ' Aguarda o servidor responder com verificações rápidas (máximo 6 segundos)
     checkCount = 0
-    Do While checkCount < 40
-        WScript.Sleep 250
+    Do While checkCount < 20
+        WScript.Sleep 300
         retCode = wsh.Run("""" & nodePath & """ """ & currentDir & "\verificar_servidor.cjs""", 0, True)
         If retCode = 0 Then
             isRunning = True
@@ -72,7 +78,25 @@ If Not isRunning Then
     Loop
 End If
 
-' 4. Localizar Microsoft Edge ou Google Chrome para abrir em janela nativa de aplicativo Windows
+' Se após a inicialização o servidor não responder, informa o usuário com detalhes
+If Not isRunning Then
+    Dim erroDetalhe
+    erroDetalhe = ""
+    If fso.FileExists(currentDir & "\servidor.log") Then
+        On Error Resume Next
+        Dim fLog
+        Set fLog = fso.OpenTextFile(currentDir & "\servidor.log", 1)
+        erroDetalhe = vbCrLf & vbCrLf & "Detalhes do log:" & vbCrLf & fLog.ReadAll
+        fLog.Close
+        On Error GoTo 0
+    End If
+
+    MsgBox "O servidor do AutoOS não pôde ser iniciado." & erroDetalhe & vbCrLf & vbCrLf & _
+           "Experimente executar o arquivo CORRIGIR_TRAVAMENTO.bat ou INICIAR_AUTOOS.bat.", vbCritical, "AutoOS - Erro na Inicialização"
+    WScript.Quit 1
+End If
+
+' 5. Localizar Microsoft Edge ou Google Chrome para abrir em janela própria de app
 edgePath = ""
 chromePath = ""
 
@@ -92,12 +116,18 @@ ElseIf fso.FileExists(wsh.ExpandEnvironmentStrings("%LocalAppData%") & "\Google\
     chromePath = wsh.ExpandEnvironmentStrings("%LocalAppData%") & "\Google\Chrome\Application\chrome.exe"
 End If
 
-' 5. Abre como aplicativo nativo em janela própria do Windows
+' 6. Abrir o AutoOS em janela de aplicativo limpa ou no navegador padrão
 If edgePath <> "" Then
     wsh.Run """" & edgePath & """ --app=""" & appUrl & """ --start-maximized", 1, False
 ElseIf chromePath <> "" Then
     wsh.Run """" & chromePath & """ --app=""" & appUrl & """ --start-maximized", 1, False
 Else
-    ' Fallback para o navegador padrão do Windows se não houver Edge ou Chrome
-    wsh.Run "cmd /c start " & appUrl, 0, False
+    ' Se não encontrar caminhos explícitos, tenta abrir o Edge via start ou o navegador padrão
+    On Error Resume Next
+    retCode = wsh.Run("cmd /c start msedge --app=""" & appUrl & """", 0, False)
+    If retCode <> 0 Then
+        wsh.Run "cmd /c start " & appUrl, 0, False
+    End If
+    On Error GoTo 0
 End If
+
