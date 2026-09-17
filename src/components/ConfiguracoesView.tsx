@@ -18,10 +18,13 @@ import {
   Eye,
   Wand2,
   ArrowUpCircle,
+  Search,
+  Loader2,
 } from 'lucide-react';
 import { OficinaConfig } from '../types';
 import { OficinaRepository } from '../services/dbRepository';
-import { formatPhone, formatCpfCnpj, formatCep } from '../utils/formatters';
+import { formatPhone, formatCpfCnpj } from '../utils/formatters';
+import { consultarCep, formatarCep } from '../utils/cep';
 import { BannerCabecalhoOficial } from './BannerCabecalhoOficial';
 import { BarraTituloOS } from './BarraTituloOS';
 import { removeImageBackground } from '../utils/imageBackgroundRemover';
@@ -70,6 +73,29 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAt
   const [logoThreshold, setLogoThreshold] = useState<number>(36);
   const [escritasThreshold, setEscritasThreshold] = useState<number>(32);
   const [processandoRemocao, setProcessandoRemocao] = useState<boolean>(false);
+  const [buscandoCep, setBuscandoCep] = useState<boolean>(false);
+
+  const handleBuscarCep = async (cepParaBuscar?: string) => {
+    const cepAlvo = cepParaBuscar || formData.cep;
+    setMensagemErro('');
+    try {
+      setBuscandoCep(true);
+      const endereco = await consultarCep(cepAlvo);
+      setFormData((prev) => ({
+        ...prev,
+        cep: endereco.cep,
+        logradouro: endereco.logradouro || prev.logradouro,
+        bairro: endereco.bairro || prev.bairro,
+        cidade: endereco.cidade || prev.cidade,
+        estado: endereco.estado || prev.estado,
+      }));
+      setMensagemSucesso('Endereço da oficina localizado com sucesso pelo CEP!');
+    } catch (err: any) {
+      setMensagemErro(err.message || 'Erro ao buscar o CEP.');
+    } finally {
+      setBuscandoCep(false);
+    }
+  };
 
   const processFileUpload = (file: File, callback: (base64: string) => void) => {
     if (file.size > 8 * 1024 * 1024) {
@@ -721,12 +747,35 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAt
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-zinc-400 font-medium mb-1">CEP</label>
-              <input
-                type="text"
-                value={formData.cep}
-                onChange={(e) => setFormData({ ...formData, cep: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 font-mono"
-              />
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  placeholder="00000-000"
+                  maxLength={9}
+                  value={formData.cep}
+                  onChange={(e) => {
+                    const formatado = formatarCep(e.target.value);
+                    setFormData({ ...formData, cep: formatado });
+                    if (formatado.replace(/\D/g, '').length === 8) {
+                      handleBuscarCep(formatado);
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 font-mono text-xs sm:text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleBuscarCep()}
+                  disabled={buscandoCep}
+                  title="Buscar endereço nos Correios pelo CEP"
+                  className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-200 rounded-lg border border-zinc-700 transition flex items-center justify-center shrink-0 disabled:opacity-50"
+                >
+                  {buscandoCep ? (
+                    <Loader2 className="w-4 h-4 text-red-400 animate-spin" />
+                  ) : (
+                    <Search className="w-4 h-4 text-zinc-300" />
+                  )}
+                </button>
+              </div>
             </div>
             <div className="sm:col-span-2">
               <label className="block text-zinc-400 font-medium mb-1">Logradouro / Rua / Avenida</label>

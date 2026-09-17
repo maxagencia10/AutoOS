@@ -1,0 +1,34 @@
+===============================================================================
+              AUTOOS - GUIA RAPIDO PARA INSTALACAO VIA PEN DRIVE
+===============================================================================
+
+1. COMO LEVAR O SISTEMA NO PEN DRIVE PARA O CLIENTE:
+   Copie todos os arquivos desta pasta para o seu pen drive.
+
+2. OPCIONAL: EMBUTIR O NODE.JS (PARA FUNCIONAR SEM INTERNET):
+   - Opcao A: Execute o arquivo "BAIXAR_NODE_PORTATIL.bat" no seu computador com
+     internet antes de ir ao cliente. Ele vai baixar o "node.exe" direto para a pasta
+     "runtime\", tornando o sistema 100% independente de instalacao!
+   - Opcao B: Baixe o instalador oficial do Node (ex: "node-v20-x64.msi") e coloque
+     na mesma pasta deste pen drive. O instalador do AutoOS ira instalar o Node
+     de forma 100% automatica e silenciosa!
+
+3. COMO INSTALAR NO CLIENTE:
+   - Para instalacao 100% invisivel (sem tela preta do prompt):
+     De 2 cliques em "INSTALAR_SILENCIOSO.vbs"
+   
+   - Ou para instalacao tradicional acompanhando o progresso:
+     De 2 cliques em "INSTALAR_AUTOOS.bat"
+
+4. COMO O SISTEMA FUNCIONA PARA O CLIENTE:
+   - O instalador cria o atalho "AutoOS Oficina" na Area de Trabalho.
+   - Ao clicar no atalho, o sistema roda em SEGUNDO PLANO (sem janela preta aberta)
+     e abre em uma JANELA PROPRIA DE APLICATIVO DO WINDOWS (sem abas de navegador
+     e sem barra de endereco), parecendo um programa instalado nativo!
+   - O sistema sincroniza antes de abrir a janela: ele so abre quando o servidor
+     local ja estiver 100% pronto e respondendo, eliminando erros de conexao!
+
+5. UTILITARIOS ADICIONAIS:
+   - "FINALIZAR_AUTOOS.bat": Encerra o servidor em segundo plano.
+   - "CORRIGIR_TRAVAMENTO.bat": Libera a porta 3000 caso algum processo tenha travado.
+===============================================================================

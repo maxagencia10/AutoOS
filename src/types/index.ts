@@ -53,6 +53,13 @@ export interface Usuario {
   oficina_id?: string;
   nome: string;
   email: string;
+  telefone?: string;
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
   senha?: string;
   perfil: PerfilUsuario;
   ativo: boolean;

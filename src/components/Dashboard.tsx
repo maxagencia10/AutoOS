@@ -14,6 +14,9 @@ import {
   ArrowRight,
   Eye,
   Calendar,
+  Sparkles,
+  HelpCircle,
+  MousePointer,
 } from 'lucide-react';
 import { OrdemServico } from '../types';
 import { OrdemServicoRepository } from '../services/dbRepository';
@@ -25,6 +28,7 @@ interface DashboardProps {
   onNovoVeiculo: () => void;
   onVerTodasOS: () => void;
   onVisualizarOS: (os: OrdemServico) => void;
+  onAbrirTour?: (etapaInicial?: number) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -33,6 +37,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNovoVeiculo,
   onVerTodasOS,
   onVisualizarOS,
+  onAbrirTour,
 }) => {
   const [metrics, setMetrics] = useState({
     total: 0,
@@ -128,6 +133,111 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <Search className="w-3.5 h-3.5 text-zinc-400" />
             <span>Consultar OS</span>
           </button>
+        </div>
+      </div>
+
+      {/* Roteiro Rápido em 3 Passos para Facilitar o Uso */}
+      <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border-2 border-red-500/30 rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-zinc-800/80">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-red-600/20 text-red-400 rounded-xl border border-red-500/30 shrink-0">
+              <Sparkles className="w-5 h-5 text-red-500" />
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                <span>Roteiro de Atendimento: Como Usar em 3 Passos</span>
+              </h2>
+              <p className="text-xs text-zinc-400">
+                Siga sempre esta ordem simples: Cadastre o Cliente ➔ Cadastre o Veículo ➔ Gere a Ordem de Serviço.
+              </p>
+            </div>
+          </div>
+
+          {onAbrirTour && (
+            <button
+              onClick={() => onAbrirTour(0)}
+              id="dash-btn-iniciar-tour"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-red-950/60 transition border border-red-400 shrink-0"
+            >
+              <MousePointer className="w-4 h-4 text-white" />
+              <span>Ver Tour com Apontador na Tela</span>
+            </button>
+          )}
+        </div>
+
+        {/* 3 Passos Visuais Interativos */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-3">
+          {/* 1. Cadastrar Cliente */}
+          <div
+            onClick={() => onAbrirTour ? onAbrirTour(1) : onNovoCliente()}
+            className="bg-zinc-950/60 hover:bg-zinc-800/70 border border-zinc-800 hover:border-red-500/50 rounded-xl p-3.5 transition cursor-pointer group flex flex-col justify-between"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-blue-400 bg-blue-950/60 border border-blue-800/40 px-2 py-0.5 rounded-full">
+                  1º Passo
+                </span>
+                <Users className="w-4 h-4 text-blue-400" />
+              </div>
+              <h3 className="font-bold text-white text-sm group-hover:text-red-400 transition">
+                1. Cadastrar o Cliente
+              </h3>
+              <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                Informe o nome e WhatsApp. Dica: digite o CEP que o endereço preenche sozinho!
+              </p>
+            </div>
+            <div className="mt-3 pt-2 border-t border-zinc-900 flex items-center justify-between text-[11px] font-semibold text-blue-400 group-hover:text-blue-300">
+              <span>Como fazer ➔</span>
+            </div>
+          </div>
+
+          {/* 2. Cadastrar Veículo */}
+          <div
+            onClick={() => onAbrirTour ? onAbrirTour(2) : onNovoVeiculo()}
+            className="bg-zinc-950/60 hover:bg-zinc-800/70 border border-zinc-800 hover:border-amber-500/50 rounded-xl p-3.5 transition cursor-pointer group flex flex-col justify-between"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 bg-amber-950/60 border border-amber-800/40 px-2 py-0.5 rounded-full">
+                  2º Passo
+                </span>
+                <Car className="w-4 h-4 text-amber-400" />
+              </div>
+              <h3 className="font-bold text-white text-sm group-hover:text-amber-400 transition">
+                2. Cadastrar o Veículo
+              </h3>
+              <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                Vincule ao cliente e digite a placa (Mercosul ou antiga), marca, modelo e Km atual.
+              </p>
+            </div>
+            <div className="mt-3 pt-2 border-t border-zinc-900 flex items-center justify-between text-[11px] font-semibold text-amber-400 group-hover:text-amber-300">
+              <span>Como fazer ➔</span>
+            </div>
+          </div>
+
+          {/* 3. Gerar OS */}
+          <div
+            onClick={() => onAbrirTour ? onAbrirTour(3) : onNovaOS()}
+            className="bg-zinc-950/60 hover:bg-zinc-800/70 border border-zinc-800 hover:border-emerald-500/50 rounded-xl p-3.5 transition cursor-pointer group flex flex-col justify-between"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded-full">
+                  3º Passo
+                </span>
+                <FileText className="w-4 h-4 text-emerald-400" />
+              </div>
+              <h3 className="font-bold text-white text-sm group-hover:text-emerald-400 transition">
+                3. Gerar a Ordem de Serviço
+              </h3>
+              <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                Selecione o cliente e carro, adicione peças/serviços e emita para impressão e WhatsApp.
+              </p>
+            </div>
+            <div className="mt-3 pt-2 border-t border-zinc-900 flex items-center justify-between text-[11px] font-semibold text-emerald-400 group-hover:text-emerald-300">
+              <span>Emitir OS ➔</span>
+            </div>
+          </div>
         </div>
       </div>
 

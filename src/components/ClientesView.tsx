@@ -14,6 +14,7 @@ import {
   X,
   AlertCircle,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import { Cliente, Veiculo, OrdemServico } from '../types';
 import {
@@ -24,24 +25,34 @@ import {
 import {
   formatCpfCnpj,
   formatPhone,
-  formatCep,
   formatCurrency,
   formatDate,
   getStatusBadgeInfo,
   formatPlaca,
 } from '../utils/formatters';
+import { consultarCep, formatarCep } from '../utils/cep';
 import { useAuth } from '../context/AuthContext';
 
 interface ClientesViewProps {
   onVisualizarOS: (os: OrdemServico) => void;
   onNovaOSParaCliente?: (cliente: Cliente) => void;
+  onAbrirTour?: (etapa?: number) => void;
+  clienteInicial?: Cliente | null;
+  onLimparClienteInicial?: () => void;
 }
 
-export const ClientesView: React.FC<ClientesViewProps> = ({ onVisualizarOS, onNovaOSParaCliente }) => {
+export const ClientesView: React.FC<ClientesViewProps> = ({
+  onVisualizarOS,
+  onNovaOSParaCliente,
+  onAbrirTour,
+  clienteInicial,
+  onLimparClienteInicial,
+}) => {
   const { isAdmin } = useAuth();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [clienteDestacadoId, setClienteDestacadoId] = useState<string | null>(null);
 
   // Modal de Cadastro/Edição
   const [modalOpen, setModalOpen] = useState(false);
@@ -62,6 +73,28 @@ export const ClientesView: React.FC<ClientesViewProps> = ({ onVisualizarOS, onNo
   });
   const [erroForm, setErroForm] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [buscandoCep, setBuscandoCep] = useState(false);
+
+  const handleBuscarCep = async (cepParaBuscar?: string) => {
+    const cepAlvo = cepParaBuscar || formData.cep;
+    setErroForm('');
+    try {
+      setBuscandoCep(true);
+      const endereco = await consultarCep(cepAlvo);
+      setFormData((prev) => ({
+        ...prev,
+        cep: endereco.cep,
+        logradouro: endereco.logradouro || prev.logradouro,
+        bairro: endereco.bairro || prev.bairro,
+        cidade: endereco.cidade || prev.cidade,
+        estado: endereco.estado || prev.estado,
+      }));
+    } catch (err: any) {
+      setErroForm(err.message || 'Erro ao consultar o CEP do cliente.');
+    } finally {
+      setBuscandoCep(false);
+    }
+  };
 
   // Modal de Detalhes / Histórico do Cliente (Section 29)
   const [detalheCliente, setDetalheCliente] = useState<Cliente | null>(null);
@@ -72,6 +105,16 @@ export const ClientesView: React.FC<ClientesViewProps> = ({ onVisualizarOS, onNo
   useEffect(() => {
     carregarClientes();
   }, [search]);
+
+  // Ao navegar via Busca Global para um cliente específico
+  useEffect(() => {
+    if (clienteInicial) {
+      setClienteDestacadoId(clienteInicial.id);
+      setSearch(clienteInicial.nome);
+      abrirHistorico(clienteInicial);
+      onLimparClienteInicial?.();
+    }
+  }, [clienteInicial]);
 
   const carregarClientes = async () => {
     setLoading(true);
@@ -203,6 +246,29 @@ export const ClientesView: React.FC<ClientesViewProps> = ({ onVisualizarOS, onNo
         </button>
       </div>
 
+      {/* Banner Orientativo do 1º Passo do Roteiro */}
+      <div className="bg-gradient-to-r from-blue-950/40 via-zinc-900 to-zinc-900 border border-blue-900/60 rounded-xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-7 h-7 rounded-lg bg-blue-600/30 border border-blue-500/50 flex items-center justify-center text-blue-400 font-bold shrink-0 text-xs">
+            1º
+          </div>
+          <div>
+            <span className="font-bold text-blue-300 block sm:inline">1º Passo do Roteiro: Cadastrar o Cliente. </span>
+            <span className="text-zinc-300">
+              Clique em <strong className="text-white">"Novo Cliente"</strong> para preencher o Nome e WhatsApp. Dica: digite o CEP que Rua, Bairro e Cidade preenchem sozinhos!
+            </span>
+          </div>
+        </div>
+        {onAbrirTour && (
+          <button
+            onClick={() => onAbrirTour(1)}
+            className="text-blue-400 hover:text-blue-300 font-semibold underline underline-offset-2 shrink-0 text-left sm:text-right"
+          >
+            Ver instruções com apontador ➔
+          </button>
+        )}
+      </div>
+
       {/* Barra de Pesquisa */}
       <div className="relative">
         <Search className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -227,11 +293,17 @@ export const ClientesView: React.FC<ClientesViewProps> = ({ onVisualizarOS, onNo
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {clientes.map((c) => (
-            <div
-              key={c.id}
-              className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl p-4 sm:p-5 flex flex-col justify-between transition shadow-sm"
-            >
+          {clientes.map((c) => {
+            const isDestacado = c.id === clienteDestacadoId;
+            return (
+              <div
+                key={c.id}
+                className={`bg-zinc-900 border rounded-xl p-4 sm:p-5 flex flex-col justify-between transition shadow-sm ${
+                  isDestacado
+                    ? 'border-red-500 bg-red-950/20 ring-2 ring-red-500/40 shadow-lg shadow-red-950/50'
+                    : 'border-zinc-800 hover:border-zinc-700'
+                }`}
+              >
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -307,9 +379,10 @@ export const ClientesView: React.FC<ClientesViewProps> = ({ onVisualizarOS, onNo
                 )}
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
+    )}
 
       {/* Modal de Cadastro / Edição de Cliente */}
       {modalOpen && (
@@ -336,6 +409,14 @@ export const ClientesView: React.FC<ClientesViewProps> = ({ onVisualizarOS, onNo
                 <span>{erroForm}</span>
               </div>
             )}
+
+            {/* Dica Simples para o Usuário */}
+            <div className="mb-4 p-3 bg-blue-950/30 border border-blue-900/40 rounded-xl text-xs flex items-start gap-2.5">
+              <span className="text-blue-400 font-bold shrink-0">💡 Passo 1:</span>
+              <span className="text-zinc-300">
+                Preencha pelo menos o <strong className="text-white">Nome</strong> e o <strong className="text-white">WhatsApp</strong>. Ao digitar os 8 dígitos do <strong className="text-white">CEP</strong>, o sistema busca o endereço na hora!
+              </span>
+            </div>
 
             <form onSubmit={salvarCliente} className="space-y-4 text-xs sm:text-sm">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -406,13 +487,35 @@ export const ClientesView: React.FC<ClientesViewProps> = ({ onVisualizarOS, onNo
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-zinc-400 font-medium mb-1">CEP</label>
-                    <input
-                      type="text"
-                      placeholder="00000-000"
-                      value={formData.cep}
-                      onChange={(e) => setFormData({ ...formData, cep: e.target.value })}
-                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 font-mono text-xs"
-                    />
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        placeholder="00000-000"
+                        maxLength={9}
+                        value={formData.cep}
+                        onChange={(e) => {
+                          const formatado = formatarCep(e.target.value);
+                          setFormData({ ...formData, cep: formatado });
+                          if (formatado.replace(/\D/g, '').length === 8) {
+                            handleBuscarCep(formatado);
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 font-mono text-xs sm:text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleBuscarCep()}
+                        disabled={buscandoCep}
+                        title="Buscar endereço nos Correios pelo CEP"
+                        className="px-2.5 py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-200 rounded-lg border border-zinc-700 transition flex items-center justify-center shrink-0 disabled:opacity-50"
+                      >
+                        {buscandoCep ? (
+                          <Loader2 className="w-4 h-4 text-red-400 animate-spin" />
+                        ) : (
+                          <Search className="w-4 h-4 text-zinc-300" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <div className="sm:col-span-2">
                     <label className="block text-zinc-400 font-medium mb-1">Logradouro / Rua</label>

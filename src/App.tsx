@@ -12,6 +12,7 @@ import { AtualizacoesView } from './components/AtualizacoesView';
 import { NovaOrdemServicoModal } from './components/NovaOrdemServicoModal';
 import { VisualizacaoOSModal } from './components/VisualizacaoOSModal';
 import { InstalacaoWizard } from './components/InstalacaoWizard';
+import { GuiaPassoAPasso } from './components/GuiaPassoAPasso';
 import { Cliente, Veiculo, OrdemServico } from './types';
 
 function MainApp() {
@@ -24,6 +25,32 @@ function MainApp() {
   const [osParaVisualizar, setOsParaVisualizar] = useState<OrdemServico | null>(null);
   const [clientePreselecionado, setClientePreselecionado] = useState<Cliente | null>(null);
   const [veiculoPreselecionado, setVeiculoPreselecionado] = useState<Veiculo | null>(null);
+
+  // Registro direcionado pela Busca Global no Navbar
+  const [clienteParaAbrir, setClienteParaAbrir] = useState<Cliente | null>(null);
+  const [veiculoParaAbrir, setVeiculoParaAbrir] = useState<Veiculo | null>(null);
+
+  // Roteiro Guiado Passo a Passo para Novos Usuários
+  const [tourAberto, setTourAberto] = useState<boolean>(() => {
+    // Inicia aberto na primeira utilização para direcionar o usuário simples
+    return localStorage.getItem('autoos_tour_visto') !== 'true';
+  });
+  const [etapaTour, setEtapaTour] = useState<number>(0);
+
+  const abrirTour = (etapaInicial: number = 0) => {
+    setEtapaTour(etapaInicial);
+    setTourAberto(true);
+  };
+
+  const handleNavegarParaCliente = (cliente: Cliente) => {
+    setClienteParaAbrir(cliente);
+    setCurrentTab('clientes');
+  };
+
+  const handleNavegarParaVeiculo = (veiculo: Veiculo) => {
+    setVeiculoParaAbrir(veiculo);
+    setCurrentTab('veiculos');
+  };
 
   if (carregando) {
     return (
@@ -64,6 +91,9 @@ function MainApp() {
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
         onNovaOS={() => abrirNovaOS()}
+        onAbrirTour={() => abrirTour(0)}
+        onSelectCliente={handleNavegarParaCliente}
+        onSelectVeiculo={handleNavegarParaVeiculo}
       />
 
       {/* Conteúdo Principal */}
@@ -75,6 +105,7 @@ function MainApp() {
             onNovoVeiculo={() => setCurrentTab('veiculos')}
             onVerTodasOS={() => setCurrentTab('os')}
             onVisualizarOS={abrirVisualizarOS}
+            onAbrirTour={abrirTour}
           />
         )}
 
@@ -90,6 +121,9 @@ function MainApp() {
           <ClientesView
             onVisualizarOS={abrirVisualizarOS}
             onNovaOSParaCliente={(cliente) => abrirNovaOS(cliente, null)}
+            onAbrirTour={abrirTour}
+            clienteInicial={clienteParaAbrir}
+            onLimparClienteInicial={() => setClienteParaAbrir(null)}
           />
         )}
 
@@ -97,6 +131,9 @@ function MainApp() {
           <VeiculosView
             onVisualizarOS={abrirVisualizarOS}
             onNovaOSParaVeiculo={(veiculo) => abrirNovaOS(null, veiculo)}
+            onAbrirTour={abrirTour}
+            veiculoInicial={veiculoParaAbrir}
+            onLimparVeiculoInicial={() => setVeiculoParaAbrir(null)}
           />
         )}
 
@@ -147,6 +184,23 @@ function MainApp() {
           }}
         />
       )}
+
+      {/* Tour Guiado Passo a Passo (1. Cliente -> 2. Veículo -> 3. OS) */}
+      <GuiaPassoAPasso
+        isOpen={tourAberto}
+        onClose={() => {
+          setTourAberto(false);
+          try {
+            localStorage.setItem('autoos_tour_visto', 'true');
+          } catch {
+            // storage indisponível
+          }
+        }}
+        currentTab={currentTab}
+        onSelectTab={setCurrentTab}
+        onAbrirNovaOS={() => abrirNovaOS()}
+        etapaInicial={etapaTour}
+      />
 
       {/* Rodapé do Sistema */}
       <footer className="border-t border-zinc-900 py-4 text-center text-xs text-zinc-400 no-print mt-auto">

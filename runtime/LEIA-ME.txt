@@ -1,0 +1,1 @@
+# Coloque o executável node.exe aqui caso deseje usar o AutoOS com Node.js 100% portátil sem instalar nada no Windows do cliente.

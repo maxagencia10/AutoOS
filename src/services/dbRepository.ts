@@ -1504,3 +1504,82 @@ export const AtualizacaoRepository = {
   },
 };
 
+export interface ResultadoBuscaGlobalCliente extends Cliente {
+  total_veiculos?: number;
+  total_os?: number;
+}
+
+export interface ResultadoBuscaGlobalVeiculo extends Veiculo {
+  cliente_nome: string;
+  cliente_telefone?: string;
+  cliente_whatsapp?: string;
+  cliente_cpf_cnpj?: string;
+  total_os?: number;
+}
+
+export interface ResultadoBuscaGlobal {
+  clientes: ResultadoBuscaGlobalCliente[];
+  veiculos: ResultadoBuscaGlobalVeiculo[];
+}
+
+export const BuscaGlobalRepository = {
+  /**
+   * Busca unificada e veloz de clientes (por Nome, CPF/CNPJ ou WhatsApp)
+   * e veículos (por Placa, Modelo, Marca ou Nome do Proprietário)
+   */
+  async buscar(termo: string): Promise<ResultadoBuscaGlobal> {
+    const raw = termo.trim();
+    if (!raw) {
+      return { clientes: [], veiculos: [] };
+    }
+
+    const likeTerm = `%${raw}%`;
+    const cleanDigits = raw.replace(/[^a-zA-Z0-9]/g, '');
+    const likeClean = cleanDigits ? `%${cleanDigits}%` : likeTerm;
+
+    try {
+      const [clientes, veiculos] = await Promise.all([
+        executeQuery<ResultadoBuscaGlobalCliente>(
+          `SELECT c.*,
+            COALESCE((SELECT count(*) FROM veiculos v WHERE v.cliente_id = c.id), 0)::int as total_veiculos,
+            COALESCE((SELECT count(*) FROM ordens_servico os WHERE os.cliente_id = c.id), 0)::int as total_os
+           FROM clientes c
+           WHERE c.nome ILIKE $1
+              OR c.cpf_cnpj ILIKE $1
+              OR REPLACE(REPLACE(REPLACE(c.cpf_cnpj, '.', ''), '-', ''), '/', '') ILIKE $2
+              OR c.telefone ILIKE $1
+              OR c.whatsapp ILIKE $1
+              OR REPLACE(REPLACE(REPLACE(REPLACE(c.whatsapp, '(', ''), ')', ''), '-', ''), ' ', '') ILIKE $2
+           ORDER BY c.nome ASC
+           LIMIT 8`,
+          [likeTerm, likeClean]
+        ),
+        executeQuery<ResultadoBuscaGlobalVeiculo>(
+          `SELECT v.*,
+            c.nome as cliente_nome,
+            c.telefone as cliente_telefone,
+            c.whatsapp as cliente_whatsapp,
+            c.cpf_cnpj as cliente_cpf_cnpj,
+            COALESCE((SELECT count(*) FROM ordens_servico os WHERE os.veiculo_id = v.id), 0)::int as total_os
+           FROM veiculos v
+           JOIN clientes c ON c.id = v.cliente_id
+           WHERE v.placa ILIKE $1
+              OR REPLACE(v.placa, '-', '') ILIKE $2
+              OR v.veiculo ILIKE $1
+              OR v.marca ILIKE $1
+              OR c.nome ILIKE $1
+              OR c.cpf_cnpj ILIKE $1
+           ORDER BY v.created_at DESC
+           LIMIT 8`,
+          [likeTerm, likeClean]
+        ),
+      ]);
+
+      return { clientes, veiculos };
+    } catch (error) {
+      console.error('Erro na Busca Global:', error);
+      return { clientes: [], veiculos: [] };
+    }
+  },
+};
+

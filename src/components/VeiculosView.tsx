@@ -30,17 +30,24 @@ import { useAuth } from '../context/AuthContext';
 interface VeiculosViewProps {
   onVisualizarOS: (os: OrdemServico) => void;
   onNovaOSParaVeiculo?: (veiculo: Veiculo) => void;
+  onAbrirTour?: (etapa?: number) => void;
+  veiculoInicial?: Veiculo | null;
+  onLimparVeiculoInicial?: () => void;
 }
 
 export const VeiculosView: React.FC<VeiculosViewProps> = ({
   onVisualizarOS,
   onNovaOSParaVeiculo,
+  onAbrirTour,
+  veiculoInicial,
+  onLimparVeiculoInicial,
 }) => {
   const { isAdmin } = useAuth();
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [veiculoDestacadoId, setVeiculoDestacadoId] = useState<string | null>(null);
 
   // Modal de Cadastro/Edição
   const [modalOpen, setModalOpen] = useState(false);
@@ -65,6 +72,16 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
   useEffect(() => {
     carregarDados();
   }, [search]);
+
+  // Ao navegar via Busca Global para um veículo específico
+  useEffect(() => {
+    if (veiculoInicial) {
+      setVeiculoDestacadoId(veiculoInicial.id);
+      setSearch(veiculoInicial.placa);
+      abrirHistoricoVeiculo(veiculoInicial);
+      onLimparVeiculoInicial?.();
+    }
+  }, [veiculoInicial]);
 
   const carregarDados = async () => {
     setLoading(true);
@@ -190,6 +207,29 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
         </button>
       </div>
 
+      {/* Banner Orientativo do 2º Passo do Roteiro */}
+      <div className="bg-gradient-to-r from-amber-950/40 via-zinc-900 to-zinc-900 border border-amber-900/60 rounded-xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-7 h-7 rounded-lg bg-amber-600/30 border border-amber-500/50 flex items-center justify-center text-amber-400 font-bold shrink-0 text-xs">
+            2º
+          </div>
+          <div>
+            <span className="font-bold text-amber-300 block sm:inline">2º Passo do Roteiro: Cadastrar o Veículo. </span>
+            <span className="text-zinc-300">
+              Clique em <strong className="text-white">"Novo Veículo"</strong> para vincular o carro ao cliente, digitar a Placa e o Modelo (Ex: Fiat Palio, Gol, Onix).
+            </span>
+          </div>
+        </div>
+        {onAbrirTour && (
+          <button
+            onClick={() => onAbrirTour(2)}
+            className="text-amber-400 hover:text-amber-300 font-semibold underline underline-offset-2 shrink-0 text-left sm:text-right"
+          >
+            Ver instruções com apontador ➔
+          </button>
+        )}
+      </div>
+
       {/* Barra de Pesquisa */}
       <div className="relative">
         <Search className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -214,11 +254,17 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {veiculos.map((v) => (
-            <div
-              key={v.id}
-              className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl p-4 sm:p-5 flex flex-col justify-between transition shadow-sm"
-            >
+          {veiculos.map((v) => {
+            const isDestacado = v.id === veiculoDestacadoId;
+            return (
+              <div
+                key={v.id}
+                className={`bg-zinc-900 border rounded-xl p-4 sm:p-5 flex flex-col justify-between transition shadow-sm ${
+                  isDestacado
+                    ? 'border-red-500 bg-red-950/20 ring-2 ring-red-500/40 shadow-lg shadow-red-950/50'
+                    : 'border-zinc-800 hover:border-zinc-700'
+                }`}
+              >
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -281,9 +327,10 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
                 )}
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
+    )}
 
       {/* Modal Cadastro/Edição de Veículo */}
       {modalOpen && (
@@ -310,6 +357,14 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
                 <span>{erroForm}</span>
               </div>
             )}
+
+            {/* Dica Simples para o Usuário */}
+            <div className="mb-4 p-3 bg-amber-950/30 border border-amber-900/40 rounded-xl text-xs flex items-start gap-2.5">
+              <span className="text-amber-400 font-bold shrink-0">💡 Passo 2:</span>
+              <span className="text-zinc-300">
+                Selecione o <strong className="text-white">Proprietário</strong> na lista, digite a <strong className="text-white">Placa</strong> e o <strong className="text-white">Modelo</strong> do veículo. Opcional: preencha a quilometragem atual.
+              </span>
+            </div>
 
             <form onSubmit={salvarVeiculo} className="space-y-4 text-xs sm:text-sm">
               <div>

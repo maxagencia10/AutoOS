@@ -9,10 +9,16 @@ import {
   CheckCircle2,
   X,
   AlertCircle,
+  Search,
+  Loader2,
+  Phone,
+  MapPin,
 } from 'lucide-react';
 import { Usuario, PerfilUsuario } from '../types';
 import { UsuarioRepository } from '../services/dbRepository';
 import { useAuth } from '../context/AuthContext';
+import { consultarCep, formatarCep } from '../utils/cep';
+import { formatPhone } from '../utils/formatters';
 
 export const UsuariosView: React.FC = () => {
   const { usuariosDisponiveis, usuarioAtual, recarregarUsuarios, trocarUsuario } = useAuth();
@@ -22,17 +28,53 @@ export const UsuariosView: React.FC = () => {
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
+    telefone: '',
+    cep: '',
+    logradouro: '',
+    numero: '',
+    bairro: '',
+    cidade: '',
+    estado: '',
     perfil: 'MECANICO' as PerfilUsuario,
     ativo: true,
   });
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [buscandoCep, setBuscandoCep] = useState(false);
+
+  const handleBuscarCep = async (cepInput?: string) => {
+    const alvo = cepInput || formData.cep;
+    setErro('');
+    try {
+      setBuscandoCep(true);
+      const res = await consultarCep(alvo);
+      setFormData((prev) => ({
+        ...prev,
+        cep: res.cep,
+        logradouro: res.logradouro || prev.logradouro,
+        bairro: res.bairro || prev.bairro,
+        cidade: res.cidade || prev.cidade,
+        estado: res.estado || prev.estado,
+      }));
+    } catch (err: any) {
+      setErro(err.message || 'Erro ao buscar CEP.');
+    } finally {
+      setBuscandoCep(false);
+    }
+  };
 
   const abrirModalNovo = () => {
     setUsuarioEditando(null);
     setFormData({
       nome: '',
       email: '',
+      telefone: '',
+      cep: '',
+      logradouro: '',
+      numero: '',
+      bairro: '',
+      cidade: '',
+      estado: '',
       perfil: 'MECANICO',
       ativo: true,
     });
@@ -45,6 +87,13 @@ export const UsuariosView: React.FC = () => {
     setFormData({
       nome: u.nome,
       email: u.email,
+      telefone: u.telefone || '',
+      cep: u.cep || '',
+      logradouro: u.logradouro || '',
+      numero: u.numero || '',
+      bairro: u.bairro || '',
+      cidade: u.cidade || '',
+      estado: u.estado || '',
       perfil: u.perfil,
       ativo: u.ativo,
     });
@@ -249,16 +298,110 @@ export const UsuariosView: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-zinc-300 font-semibold mb-1">E-mail</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="usuario@oficina.com.br"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-300 font-semibold mb-1">E-mail</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="usuario@oficina.com.br"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 text-xs sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-300 font-semibold mb-1">Telefone / WhatsApp</label>
+                  <input
+                    type="text"
+                    placeholder="(11) 99999-9999"
+                    value={formData.telefone}
+                    onChange={(e) => setFormData({ ...formData, telefone: formatPhone(e.target.value) })}
+                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 text-xs sm:text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Endereço / CEP do Colaborador */}
+              <div className="p-3 bg-zinc-950/60 rounded-xl border border-zinc-800/80 space-y-3">
+                <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block">
+                  Endereço do Usuário (Opcional)
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1">CEP</label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        placeholder="00000-000"
+                        maxLength={9}
+                        value={formData.cep}
+                        onChange={(e) => {
+                          const formatado = formatarCep(e.target.value);
+                          setFormData({ ...formData, cep: formatado });
+                          if (formatado.replace(/\D/g, '').length === 8) {
+                            handleBuscarCep(formatado);
+                          }
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 font-mono text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleBuscarCep()}
+                        disabled={buscandoCep}
+                        title="Buscar CEP"
+                        className="px-2 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg border border-zinc-700 transition shrink-0"
+                      >
+                        {buscandoCep ? (
+                          <Loader2 className="w-3.5 h-3.5 text-red-400 animate-spin" />
+                        ) : (
+                          <Search className="w-3.5 h-3.5 text-zinc-300" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-zinc-400 font-medium mb-1">Rua / Logradouro</label>
+                    <input
+                      type="text"
+                      placeholder="Rua..."
+                      value={formData.logradouro}
+                      onChange={(e) => setFormData({ ...formData, logradouro: e.target.value })}
+                      className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1">Bairro</label>
+                    <input
+                      type="text"
+                      placeholder="Bairro"
+                      value={formData.bairro}
+                      onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
+                      className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1">Cidade</label>
+                    <input
+                      type="text"
+                      placeholder="Cidade"
+                      value={formData.cidade}
+                      onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
+                      className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1">UF</label>
+                    <input
+                      type="text"
+                      maxLength={2}
+                      placeholder="UF"
+                      value={formData.estado}
+                      onChange={(e) => setFormData({ ...formData, estado: e.target.value.toUpperCase() })}
+                      className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 font-mono uppercase text-xs"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>

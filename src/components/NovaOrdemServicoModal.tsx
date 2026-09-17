@@ -384,6 +384,14 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
         {/* Formulário com Scroll Interno */}
         <form onSubmit={handleSalvar} className="overflow-y-auto flex-1 py-4 space-y-6 text-xs sm:text-sm pr-1">
           
+          {/* Dica do Roteiro - Passo 3 */}
+          <div className="bg-emerald-950/30 border border-emerald-900/40 rounded-xl p-3 text-xs flex items-start gap-2.5">
+            <span className="text-emerald-400 font-bold shrink-0">💡 Passo 3:</span>
+            <span className="text-zinc-300">
+              1) Escolha o <strong className="text-white">Cliente</strong> e o <strong className="text-white">Veículo</strong> ➔ 2) Descreva o <strong className="text-white">Defeito</strong> do carro ➔ 3) Adicione os <strong className="text-white">Serviços e Peças</strong> com valores ➔ 4) Clique em <strong className="text-white">"Salvar e Emitir OS"</strong> para imprimir ou enviar no WhatsApp!
+            </span>
+          </div>
+
           {/* Data, Hora e Status */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-zinc-950/80 p-3.5 rounded-xl border border-zinc-800/80">
             <div>
@@ -768,12 +776,12 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
             </div>
           </div>
 
-          {/* Rodapé e Ações */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-800">
+          {/* Rodapé e Ações Responsivas */}
+          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:gap-3 pt-4 border-t border-zinc-800 shrink-0 sticky bottom-0 bg-zinc-900/95 backdrop-blur-sm -mx-4 -mb-4 sm:-mx-6 sm:-mb-6 p-4 sm:p-6 rounded-b-2xl">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-zinc-300 hover:text-white bg-zinc-800 rounded-lg transition"
+              className="px-4 py-2.5 text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 rounded-lg font-medium transition text-center"
             >
               Cancelar
             </button>
@@ -781,10 +789,10 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
               type="submit"
               disabled={salvando}
               id="btn-salvar-os"
-              className="px-6 py-2.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-semibold rounded-lg shadow-lg shadow-red-950 transition border border-red-500 disabled:opacity-50 flex items-center gap-2"
+              className="px-6 py-2.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-semibold rounded-lg shadow-lg shadow-red-950 transition border border-red-500 disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              <CheckCircle className="w-4 h-4" />
-              <span>{salvando ? 'Salvando OS no PostgreSQL...' : osParaEditar ? 'Atualizar Ordem de Serviço' : 'Salvar e Emitir OS'}</span>
+              <CheckCircle className="w-4 h-4 shrink-0" />
+              <span>{salvando ? 'Salvando Ordem de Serviço...' : osParaEditar ? 'Atualizar Ordem de Serviço' : 'Salvar e Emitir OS'}</span>
             </button>
           </div>
 
