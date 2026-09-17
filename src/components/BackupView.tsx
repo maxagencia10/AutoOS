@@ -13,6 +13,7 @@ import {
   Clock,
   Sparkles,
   X,
+  ArrowLeft,
 } from 'lucide-react';
 import {
   BackupRepository,
@@ -24,7 +25,11 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { formatDateTime } from '../utils/formatters';
 
-export const BackupView: React.FC = () => {
+interface BackupViewProps {
+  onVoltar?: () => void;
+}
+
+export const BackupView: React.FC<BackupViewProps> = ({ onVoltar }) => {
   const { zerarParaNovaInstalacao } = useAuth();
   const [stats, setStats] = useState({
     clientes: 0,
@@ -159,7 +164,7 @@ export const BackupView: React.FC = () => {
     <div className="space-y-6 max-w-4xl mx-auto">
       
       {/* Cabeçalho */}
-      <div className="bg-zinc-900 border border-zinc-800 p-4 sm:p-5 rounded-xl flex items-center justify-between">
+      <div className="bg-zinc-900 border border-zinc-800 p-4 sm:p-5 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
             <HardDrive className="w-6 h-6 text-red-500" />
@@ -169,6 +174,18 @@ export const BackupView: React.FC = () => {
             Exportação e restauração segura dos dados com armazenamento local protegido.
           </p>
         </div>
+
+        {onVoltar && (
+          <button
+            type="button"
+            onClick={onVoltar}
+            title="Voltar para a tela principal (Dashboard)"
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-300 hover:text-white rounded-lg text-xs sm:text-sm font-medium transition border border-zinc-700 shadow-sm shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Voltar ao Início</span>
+          </button>
+        )}
       </div>
 
       {mensagemSucesso && (

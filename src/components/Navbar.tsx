@@ -41,7 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'os', label: 'Ordens de Serviço', icon: FileText },
     { id: 'clientes', label: 'Clientes', icon: Users },
     { id: 'veiculos', label: 'Veículos', icon: Car },
-    { id: 'configuracoes', label: 'Oficina', icon: Settings, adminOnly: true },
+    { id: 'configuracoes', label: 'Oficina (Ajustes)', icon: Settings },
     { id: 'usuarios', label: 'Usuários', icon: ShieldCheck, adminOnly: true },
     { id: 'backup', label: 'Backup & Banco', icon: HardDrive },
     { id: 'atualizacoes', label: 'Atualizações', icon: ArrowUpCircle, adminOnly: true },
@@ -50,7 +50,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="bg-zinc-950 border-b border-zinc-800 sticky top-0 z-40 shadow-xl no-print">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 gap-4">
+        <div className="flex items-center justify-between h-16 gap-3 lg:gap-4">
           
           {/* Logo & Marca da Aplicação */}
           <div className="flex items-center gap-2 sm:gap-3 cursor-pointer select-none shrink-0" onClick={() => onSelectTab('dashboard')}>
@@ -68,7 +68,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Navegação Principal */}
-          <nav className="hidden md:flex items-center space-x-1 lg:space-x-1.5 overflow-x-auto py-1 max-w-[50%] lg:max-w-none scrollbar-none">
+          <nav className="hidden md:flex items-center space-x-1 lg:space-x-1.5 overflow-x-auto py-1 scrollbar-none">
             {navItems.map((item) => {
               if (item.adminOnly && !isAdmin) return null;
               const Icon = item.icon;
@@ -99,6 +99,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onSelectVeiculo={onSelectVeiculo}
               />
             )}
+
+            {/* Botão Direto com a Engrenagem para Configurações da Oficina & Cabeçalho */}
+            <button
+              id="btn-navbar-configuracoes-direto"
+              onClick={() => onSelectTab('configuracoes')}
+              title="Configurações da Oficina, Cabeçalho da OS & Impressão"
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border text-xs sm:text-sm font-semibold transition shrink-0 shadow-sm ${
+                currentTab === 'configuracoes'
+                  ? 'bg-red-600/20 text-red-400 border-red-500/50 shadow-red-950/40'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-700 hover:border-zinc-600'
+              }`}
+            >
+              <Settings className={`w-4 h-4 shrink-0 ${currentTab === 'configuracoes' ? 'text-red-400' : 'text-zinc-400'}`} />
+              <span className="hidden sm:inline">Oficina</span>
+            </button>
 
             {onAbrirTour && (
               <button

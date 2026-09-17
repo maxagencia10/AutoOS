@@ -17,6 +17,7 @@ import {
   Sparkles,
   HelpCircle,
   MousePointer,
+  Settings,
 } from 'lucide-react';
 import { OrdemServico } from '../types';
 import { OrdemServicoRepository } from '../services/dbRepository';
@@ -29,6 +30,7 @@ interface DashboardProps {
   onVerTodasOS: () => void;
   onVisualizarOS: (os: OrdemServico) => void;
   onAbrirTour?: (etapaInicial?: number) => void;
+  onConfiguracoes?: () => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -38,6 +40,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onVerTodasOS,
   onVisualizarOS,
   onAbrirTour,
+  onConfiguracoes,
 }) => {
   const [metrics, setMetrics] = useState({
     total: 0,
@@ -112,18 +115,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <button
             id="dash-btn-novo-cliente"
             onClick={onNovoCliente}
+            title="Ir para a gestão de Clientes"
             className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-200 rounded-lg text-xs sm:text-sm font-medium transition border border-zinc-700"
           >
             <Users className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Novo Cliente</span>
+            <span>Clientes</span>
           </button>
           <button
             id="dash-btn-novo-veiculo"
             onClick={onNovoVeiculo}
+            title="Ir para a gestão de Veículos"
             className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-200 rounded-lg text-xs sm:text-sm font-medium transition border border-zinc-700"
           >
             <Car className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Novo Veículo</span>
+            <span>Veículos</span>
           </button>
           <button
             id="dash-btn-consultar-os"
@@ -133,6 +138,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <Search className="w-3.5 h-3.5 text-zinc-400" />
             <span>Consultar OS</span>
           </button>
+          {onConfiguracoes && (
+            <button
+              id="dash-btn-config-oficina"
+              onClick={onConfiguracoes}
+              title="Configurações da Oficina, Cabeçalho e Impressão"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-200 rounded-lg text-xs sm:text-sm font-medium transition border border-zinc-700"
+            >
+              <Settings className="w-3.5 h-3.5 text-red-400" />
+              <span>Configurar Oficina & Cabeçalho</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -155,7 +171,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
           {onAbrirTour && (
             <button
-              onClick={() => onAbrirTour(0)}
+              onClick={() => onAbrirTour(1)}
               id="dash-btn-iniciar-tour"
               className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-red-950/60 transition border border-red-400 shrink-0"
             >

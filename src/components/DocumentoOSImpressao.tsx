@@ -265,37 +265,75 @@ export const DocumentoOSImpressao: React.FC<DocumentoOSProps> = ({ os, oficina }
             </p>
           </div>
 
-          {/* Quadro 2: FORMA DE PAGAMENTO (Fundo Branco com Borda Preta e Checkboxes) */}
+          {/* Quadro 2: FORMA DE PAGAMENTO (Fundo Branco com Borda Preta e Checkboxes marcados) */}
           <div className="bg-white border-2 border-black rounded-xl p-3 flex flex-col justify-between shadow-sm">
-            <div className="flex items-center gap-1.5 mb-2">
-              {/* Ícone de Carteira/Cartões em Preto */}
-              <svg viewBox="0 0 24 24" className="w-4 h-4 fill-black text-black shrink-0">
-                <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
-              </svg>
-              <span className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-black">
-                FORMA DE PAGAMENTO
-              </span>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                {/* Ícone de Carteira/Cartões em Preto */}
+                <svg viewBox="0 0 24 24" className="w-4 h-4 fill-black text-black shrink-0">
+                  <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
+                </svg>
+                <span className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-black">
+                  FORMA DE PAGAMENTO
+                </span>
+              </div>
+              {os.forma_pagamento && (
+                <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded bg-black text-white">
+                  {os.forma_pagamento}
+                </span>
+              )}
             </div>
 
-            {/* Duas colunas com Caixas de Seleção Quadradas */}
-            <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[11px] sm:text-xs text-black font-semibold">
-              <div className="flex items-center gap-1.5">
-                <span className="w-3.5 h-3.5 border-2 border-black rounded-[2px] inline-block shrink-0 bg-white" />
-                <span>Dinheiro</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3.5 h-3.5 border-2 border-black rounded-[2px] inline-block shrink-0 bg-white" />
-                <span>Pix</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3.5 h-3.5 border-2 border-black rounded-[2px] inline-block shrink-0 bg-white" />
-                <span>Cartão</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3.5 h-3.5 border-2 border-black rounded-[2px] inline-block shrink-0 bg-white" />
-                <span className="whitespace-nowrap">Outros:______</span>
-              </div>
-            </div>
+            {/* Duas colunas com Caixas de Seleção Quadradas marcadas conforme a escolha da OS */}
+            {(() => {
+              const f = (os.forma_pagamento || '').trim().toLowerCase();
+              const isDinheiro = f === 'dinheiro';
+              const isPix = f === 'pix';
+              const isCartao = f === 'cartão' || f === 'cartao';
+              const isBoleto = f === 'boleto';
+              const isFaturado = f === 'faturado';
+              const isOutros = f === 'outros' || (!isDinheiro && !isPix && !isCartao && !isBoleto && !isFaturado && Boolean(f));
+
+              const renderCheckbox = (checked: boolean) => (
+                <span
+                  className={`w-3.5 h-3.5 border-2 border-black rounded-[2px] inline-flex items-center justify-center shrink-0 ${
+                    checked ? 'bg-black text-white font-bold' : 'bg-white'
+                  }`}
+                >
+                  {checked && (
+                    <svg viewBox="0 0 24 24" className="w-3 h-3 fill-current stroke-white stroke-[2.5]">
+                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                    </svg>
+                  )}
+                </span>
+              );
+
+              return (
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[11px] sm:text-xs text-black font-semibold">
+                  <div className={`flex items-center gap-1.5 ${isDinheiro ? 'font-black text-black' : 'text-zinc-700 font-medium'}`}>
+                    {renderCheckbox(isDinheiro)}
+                    <span>Dinheiro</span>
+                  </div>
+
+                  <div className={`flex items-center gap-1.5 ${isPix ? 'font-black text-black' : 'text-zinc-700 font-medium'}`}>
+                    {renderCheckbox(isPix)}
+                    <span>Pix</span>
+                  </div>
+
+                  <div className={`flex items-center gap-1.5 ${isCartao ? 'font-black text-black' : 'text-zinc-700 font-medium'}`}>
+                    {renderCheckbox(isCartao)}
+                    <span>Cartão</span>
+                  </div>
+
+                  <div className={`flex items-center gap-1.5 ${isBoleto ? 'font-black text-black' : isFaturado ? 'font-black text-black' : isOutros ? 'font-black text-black' : 'text-zinc-700 font-medium'}`}>
+                    {renderCheckbox(isBoleto || isFaturado || isOutros)}
+                    <span className="whitespace-nowrap">
+                      {isBoleto ? 'Boleto' : isFaturado ? 'Faturado' : isOutros ? `Outros: ${os.forma_pagamento}` : 'Outros:______'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Quadro 3: CONDIÇÕES GERAIS (Fundo Totalmente Preto com Tópicos em Branco) */}

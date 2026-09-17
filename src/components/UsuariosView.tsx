@@ -13,6 +13,7 @@ import {
   Loader2,
   Phone,
   MapPin,
+  ArrowLeft,
 } from 'lucide-react';
 import { Usuario, PerfilUsuario } from '../types';
 import { UsuarioRepository } from '../services/dbRepository';
@@ -20,7 +21,11 @@ import { useAuth } from '../context/AuthContext';
 import { consultarCep, formatarCep } from '../utils/cep';
 import { formatPhone } from '../utils/formatters';
 
-export const UsuariosView: React.FC = () => {
+interface UsuariosViewProps {
+  onVoltar?: () => void;
+}
+
+export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
   const { usuariosDisponiveis, usuarioAtual, recarregarUsuarios, trocarUsuario } = useAuth();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -156,14 +161,28 @@ export const UsuariosView: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={abrirModalNovo}
-          id="btn-novo-usuario"
-          className="flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white rounded-lg text-sm font-semibold shadow-md shadow-red-950 transition border border-red-500"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>Novo Usuário</span>
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {onVoltar && (
+            <button
+              type="button"
+              onClick={onVoltar}
+              title="Voltar para a tela principal (Dashboard)"
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-300 hover:text-white rounded-lg text-xs sm:text-sm font-medium transition border border-zinc-700 shadow-sm shrink-0"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Voltar ao Início</span>
+            </button>
+          )}
+
+          <button
+            onClick={abrirModalNovo}
+            id="btn-novo-usuario"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white rounded-lg text-sm font-semibold shadow-md shadow-red-950 transition border border-red-500 shrink-0"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Novo Usuário</span>
+          </button>
+        </div>
       </div>
 
       {/* Tabela de Usuários */}

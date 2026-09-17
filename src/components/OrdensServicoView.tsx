@@ -14,6 +14,7 @@ import {
   Gauge,
   XCircle,
   AlertCircle,
+  ArrowLeft,
 } from 'lucide-react';
 import { OrdemServico, StatusOS } from '../types';
 import { OrdemServicoRepository } from '../services/dbRepository';
@@ -30,12 +31,14 @@ interface OrdensServicoViewProps {
   onNovaOS: () => void;
   onVisualizarOS: (os: OrdemServico) => void;
   onEditarOS: (os: OrdemServico) => void;
+  onVoltar?: () => void;
 }
 
 export const OrdensServicoView: React.FC<OrdensServicoViewProps> = ({
   onNovaOS,
   onVisualizarOS,
   onEditarOS,
+  onVoltar,
 }) => {
   const { isAdmin } = useAuth();
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
@@ -113,14 +116,28 @@ export const OrdensServicoView: React.FC<OrdensServicoViewProps> = ({
           </p>
         </div>
 
-        <button
-          id="btn-nova-os-lista"
-          onClick={onNovaOS}
-          className="flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white rounded-lg text-sm font-semibold shadow-md shadow-red-950 transition border border-red-500"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Nova Ordem de Serviço</span>
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {onVoltar && (
+            <button
+              type="button"
+              onClick={onVoltar}
+              title="Voltar para a tela principal (Dashboard)"
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-300 hover:text-white rounded-lg text-xs sm:text-sm font-medium transition border border-zinc-700 shadow-sm shrink-0"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Voltar ao Início</span>
+            </button>
+          )}
+
+          <button
+            id="btn-nova-os-lista"
+            onClick={onNovaOS}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white rounded-lg text-sm font-semibold shadow-md shadow-red-950 transition border border-red-500 shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Nova Ordem de Serviço</span>
+          </button>
+        </div>
       </div>
 
       {/* Barra de Filtros e Pesquisa */}

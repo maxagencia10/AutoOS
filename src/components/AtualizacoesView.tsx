@@ -18,6 +18,7 @@ import {
   Terminal,
   FileArchive,
   Info,
+  ArrowLeft,
 } from 'lucide-react';
 import {
   AtualizacaoRepository,
@@ -31,7 +32,11 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { formatDateTime } from '../utils/formatters';
 
-export const AtualizacoesView: React.FC = () => {
+interface AtualizacoesViewProps {
+  onVoltar?: () => void;
+}
+
+export const AtualizacoesView: React.FC<AtualizacoesViewProps> = ({ onVoltar }) => {
   const { usuarioAtual } = useAuth();
 
   // Status da versão
@@ -227,15 +232,29 @@ export const AtualizacoesView: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-stretch sm:self-auto bg-zinc-950 px-3.5 py-2 rounded-xl border border-zinc-800">
-          <div className="text-right">
-            <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold block">Versão Atual</span>
-            <span className="text-xs font-bold text-emerald-400 font-mono">{statusVersao.versao_atual}</span>
+        <div className="flex flex-wrap items-center gap-3 self-stretch sm:self-auto">
+          {onVoltar && (
+            <button
+              type="button"
+              onClick={onVoltar}
+              title="Voltar para a tela principal (Dashboard)"
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-300 hover:text-white rounded-xl text-xs sm:text-sm font-medium transition border border-zinc-700 shadow-sm shrink-0"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Voltar ao Início</span>
+            </button>
+          )}
+
+          <div className="flex items-center gap-2 bg-zinc-950 px-3.5 py-2 rounded-xl border border-zinc-800">
+            <div className="text-right">
+              <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold block">Versão Atual</span>
+              <span className="text-xs font-bold text-emerald-400 font-mono">{statusVersao.versao_atual}</span>
+            </div>
+            <span className="h-6 w-px bg-zinc-800 mx-1" />
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/80 text-amber-400 border border-amber-800/60">
+              PROTÓTIPO
+            </span>
           </div>
-          <span className="h-6 w-px bg-zinc-800 mx-1" />
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/80 text-amber-400 border border-amber-800/60">
-            PROTÓTIPO
-          </span>
         </div>
       </div>
 

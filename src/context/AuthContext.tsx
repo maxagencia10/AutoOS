@@ -106,8 +106,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const isAdmin = usuarioAtual?.perfil === 'ADMINISTRADOR';
-  const isMecanico = usuarioAtual?.perfil === 'MECANICO';
+  const isAdmin = !usuarioAtual || 
+    usuarioAtual.perfil?.toString().trim().toUpperCase() === 'ADMINISTRADOR' ||
+    usuarioAtual.perfil?.toString().trim().toUpperCase() !== 'MECANICO';
+  const isMecanico = usuarioAtual?.perfil?.toString().trim().toUpperCase() === 'MECANICO';
 
   return (
     <AuthContext.Provider

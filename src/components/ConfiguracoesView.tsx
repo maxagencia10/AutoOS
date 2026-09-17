@@ -20,6 +20,7 @@ import {
   ArrowUpCircle,
   Search,
   Loader2,
+  ArrowLeft,
 } from 'lucide-react';
 import { OficinaConfig } from '../types';
 import { OficinaRepository } from '../services/dbRepository';
@@ -32,9 +33,10 @@ import { useAuth } from '../context/AuthContext';
 
 interface ConfiguracoesViewProps {
   onIrParaAtualizacoes?: () => void;
+  onVoltar?: () => void;
 }
 
-export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAtualizacoes }) => {
+export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAtualizacoes, onVoltar }) => {
   const { zerarParaNovaInstalacao } = useAuth();
   const [formData, setFormData] = useState<OficinaConfig>({
     id: 'oficina_config_1',
@@ -302,7 +304,7 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAt
     <div className="space-y-6 max-w-4xl mx-auto">
       
       {/* Cabeçalho */}
-      <div className="bg-zinc-900 border border-zinc-800 p-4 sm:p-5 rounded-xl flex items-center justify-between">
+      <div className="bg-zinc-900 border border-zinc-800 p-4 sm:p-5 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
             <Settings className="w-6 h-6 text-red-500" />
@@ -312,6 +314,18 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAt
             Estes dados são impressos automaticamente no cabeçalho e rodapé da Ordem de Serviço em A4 e mensagens de WhatsApp.
           </p>
         </div>
+
+        {onVoltar && (
+          <button
+            type="button"
+            onClick={onVoltar}
+            title="Voltar para a tela principal (Dashboard)"
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-300 hover:text-white rounded-lg text-xs sm:text-sm font-medium transition border border-zinc-700 shadow-sm shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Voltar ao Início</span>
+          </button>
+        )}
       </div>
 
       {mensagemSucesso && (

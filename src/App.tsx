@@ -30,16 +30,22 @@ function MainApp() {
   const [clienteParaAbrir, setClienteParaAbrir] = useState<Cliente | null>(null);
   const [veiculoParaAbrir, setVeiculoParaAbrir] = useState<Veiculo | null>(null);
 
-  // Roteiro Guiado Passo a Passo para Novos Usuários
-  const [tourAberto, setTourAberto] = useState<boolean>(() => {
-    // Inicia aberto na primeira utilização para direcionar o usuário simples
-    return localStorage.getItem('autoos_tour_visto') !== 'true';
-  });
-  const [etapaTour, setEtapaTour] = useState<number>(0);
+  // Tour com Apontador Interativo (1. Cliente -> 2. Veículo -> 3. OS)
+  const [tourAberto, setTourAberto] = useState<boolean>(false);
+  const [etapaTour, setEtapaTour] = useState<number>(1);
 
-  const abrirTour = (etapaInicial: number = 0) => {
-    setEtapaTour(etapaInicial);
+  const abrirTour = (etapaInicial: number = 1) => {
+    const etapa = etapaInicial > 0 ? etapaInicial : 1;
+    setEtapaTour(etapa);
     setTourAberto(true);
+    // Vai diretamente para o primeiro (cliente), depois veículo, depois OS
+    if (etapa === 1) {
+      setCurrentTab('clientes');
+    } else if (etapa === 2) {
+      setCurrentTab('veiculos');
+    } else if (etapa === 3) {
+      setCurrentTab('os');
+    }
   };
 
   const handleNavegarParaCliente = (cliente: Cliente) => {
@@ -91,7 +97,7 @@ function MainApp() {
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
         onNovaOS={() => abrirNovaOS()}
-        onAbrirTour={() => abrirTour(0)}
+        onAbrirTour={() => abrirTour(1)}
         onSelectCliente={handleNavegarParaCliente}
         onSelectVeiculo={handleNavegarParaVeiculo}
       />
@@ -106,6 +112,7 @@ function MainApp() {
             onVerTodasOS={() => setCurrentTab('os')}
             onVisualizarOS={abrirVisualizarOS}
             onAbrirTour={abrirTour}
+            onConfiguracoes={() => setCurrentTab('configuracoes')}
           />
         )}
 
@@ -114,6 +121,7 @@ function MainApp() {
             onNovaOS={() => abrirNovaOS()}
             onVisualizarOS={abrirVisualizarOS}
             onEditarOS={abrirEditarOS}
+            onVoltar={() => setCurrentTab('dashboard')}
           />
         )}
 
@@ -124,6 +132,7 @@ function MainApp() {
             onAbrirTour={abrirTour}
             clienteInicial={clienteParaAbrir}
             onLimparClienteInicial={() => setClienteParaAbrir(null)}
+            onVoltar={() => setCurrentTab('dashboard')}
           />
         )}
 
@@ -134,18 +143,28 @@ function MainApp() {
             onAbrirTour={abrirTour}
             veiculoInicial={veiculoParaAbrir}
             onLimparVeiculoInicial={() => setVeiculoParaAbrir(null)}
+            onVoltar={() => setCurrentTab('dashboard')}
           />
         )}
 
         {currentTab === 'configuracoes' && (
-          <ConfiguracoesView onIrParaAtualizacoes={() => setCurrentTab('atualizacoes')} />
+          <ConfiguracoesView
+            onIrParaAtualizacoes={() => setCurrentTab('atualizacoes')}
+            onVoltar={() => setCurrentTab('dashboard')}
+          />
         )}
 
-        {currentTab === 'usuarios' && <UsuariosView />}
+        {currentTab === 'usuarios' && (
+          <UsuariosView onVoltar={() => setCurrentTab('dashboard')} />
+        )}
 
-        {currentTab === 'backup' && <BackupView />}
+        {currentTab === 'backup' && (
+          <BackupView onVoltar={() => setCurrentTab('dashboard')} />
+        )}
 
-        {currentTab === 'atualizacoes' && <AtualizacoesView />}
+        {currentTab === 'atualizacoes' && (
+          <AtualizacoesView onVoltar={() => setCurrentTab('dashboard')} />
+        )}
       </main>
 
       {/* Modal de Abertura / Edição de Ordem de Serviço */}

@@ -13,6 +13,7 @@ import {
   AlertCircle,
   TrendingUp,
   Sparkles,
+  ArrowLeft,
 } from 'lucide-react';
 import { Veiculo, Cliente, OrdemServico } from '../types';
 import {
@@ -35,6 +36,7 @@ interface VeiculosViewProps {
   onAbrirTour?: (etapa?: number) => void;
   veiculoInicial?: Veiculo | null;
   onLimparVeiculoInicial?: () => void;
+  onVoltar?: () => void;
 }
 
 export const VeiculosView: React.FC<VeiculosViewProps> = ({
@@ -43,6 +45,7 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
   onAbrirTour,
   veiculoInicial,
   onLimparVeiculoInicial,
+  onVoltar,
 }) => {
   const { isAdmin } = useAuth();
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
@@ -225,14 +228,28 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
           </p>
         </div>
 
-        <button
-          id="btn-novo-veiculo"
-          onClick={abrirModalNovo}
-          className="flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white rounded-lg text-sm font-semibold shadow-md shadow-red-950 transition border border-red-500"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Novo Veículo</span>
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {onVoltar && (
+            <button
+              type="button"
+              onClick={onVoltar}
+              title="Voltar para a tela principal (Dashboard)"
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-300 hover:text-white rounded-lg text-xs sm:text-sm font-medium transition border border-zinc-700 shadow-sm shrink-0"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Voltar ao Início</span>
+            </button>
+          )}
+
+          <button
+            id="btn-novo-veiculo"
+            onClick={abrirModalNovo}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white rounded-lg text-sm font-semibold shadow-md shadow-red-950 transition border border-red-500 shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Novo Veículo</span>
+          </button>
+        </div>
       </div>
 
       {/* Banner Orientativo do 2º Passo do Roteiro */}
