@@ -18,12 +18,12 @@ If Not fso.FileExists(currentDir & "\dist\index.html") Then
                   "(Uma janela sera aberta para instalar tudo e compilar o sistema).", _
                   vbQuestion + vbYesNo, "AutoOS - Preparar Arquivos")
     If resp = vbYes Then
-        wsh.Run "cmd /c GERAR_DIST_AGORA.bat", 1, True
-        If Not fso.FileExists(currentDir & "\dist\index.html") Then
-            WScript.Quit 1
-        End If
+        Dim psRunCmd
+        psRunCmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -NoExit -Command ""Set-Location -LiteralPath '" & Replace(currentDir, "'", "''") & "'; & '.\instalar.ps1'"""
+        wsh.Run psRunCmd, 1, False
+        WScript.Quit 0
     Else
-        MsgBox "Para iniciar o AutoOS, execute o arquivo GERAR_DIST_AGORA.bat ou INSTALAR_AUTOOS.bat.", vbInformation, "AutoOS"
+        MsgBox "Para instalar e iniciar o AutoOS, execute o arquivo INSTALAR_AUTOOS.bat.", vbInformation, "AutoOS"
         WScript.Quit 1
     End If
 End If
