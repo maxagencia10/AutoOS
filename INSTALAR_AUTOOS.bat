@@ -104,15 +104,14 @@ if "%SILENT_MODE%"=="0" echo [3/4] Verificando arquivos do AutoOS...
 if not exist "%SCRIPT_DIR%dist\index.html" (
     if "%SILENT_MODE%"=="0" (
         echo.
-        echo [AVISO] Pasta dist nao encontrada. Compilando pacote...
+        echo [AVISO] Pasta dist nao encontrada. Compilando pacote otimizado...
+        echo Isso e feito de forma automatica agora.
     )
-    call npm run build
-    if not exist "%SCRIPT_DIR%dist\index.html" (
-        if "%SILENT_MODE%"=="0" (
-            echo Instalando dependencias do projeto...
-            call npm install
-            call npm run build
-        )
+    if exist "%SCRIPT_DIR%GERAR_DIST_AGORA.bat" (
+        call "%SCRIPT_DIR%GERAR_DIST_AGORA.bat"
+    ) else (
+        call npm install
+        call npm run build
     )
 )
 
@@ -120,23 +119,23 @@ if not exist "%SCRIPT_DIR%dist\index.html" (
 if "%SILENT_MODE%"=="0" echo [4/4] Criando atalho na Area de Trabalho do cliente...
 set "VBS_SHORTCUT=%TEMP%\criar_atalho_autoos.vbs"
 
-echo Set oWS = WScript.CreateObject("WScript.Shell") > "%VBS_SHORTCUT%"
-echo sLinkFile = oWS.SpecialFolders("Desktop") ^& "\AutoOS Oficina.lnk" >> "%VBS_SHORTCUT%"
-echo Set oLink = oWS.CreateShortcut(sLinkFile) >> "%VBS_SHORTCUT%"
-echo oLink.TargetPath = "%SystemRoot%\System32\wscript.exe" >> "%VBS_SHORTCUT%"
-echo oLink.Arguments = """" ^& "%SCRIPT_DIR%AutoOS_Launcher.vbs" ^& """" >> "%VBS_SHORTCUT%"
-echo oLink.WorkingDirectory = "%SCRIPT_DIR%" >> "%VBS_SHORTCUT%"
-echo oLink.Description = "Sistema AutoOS para Oficina Mecanica" >> "%VBS_SHORTCUT%"
-echo If CreateObject("Scripting.FileSystemObject").FileExists("%SCRIPT_DIR%dist\favicon.ico") Then >> "%VBS_SHORTCUT%"
-echo     oLink.IconLocation = "%SCRIPT_DIR%dist\favicon.ico" >> "%VBS_SHORTCUT%"
-echo ElseIf CreateObject("Scripting.FileSystemObject").FileExists("%SCRIPT_DIR%public\favicon.ico") Then >> "%VBS_SHORTCUT%"
-echo     oLink.IconLocation = "%SCRIPT_DIR%public\favicon.ico" >> "%VBS_SHORTCUT%"
-echo Else >> "%VBS_SHORTCUT%"
-echo     oLink.IconLocation = "shell32.dll,41" >> "%VBS_SHORTCUT%"
-echo End If >> "%VBS_SHORTCUT%"
-echo oLink.Save >> "%VBS_SHORTCUT%"
+> "%VBS_SHORTCUT%" (
+    echo Set oWS = WScript.CreateObject("WScript.Shell"^)
+    echo sLinkFile = oWS.SpecialFolders("Desktop"^) ^& "\AutoOS Oficina.lnk"
+    echo Set oLink = oWS.CreateShortcut(sLinkFile^)
+    echo oLink.TargetPath = "%SystemRoot%\System32\wscript.exe"
+    echo oLink.Arguments = """" ^& WScript.Arguments(0^) ^& """"
+    echo oLink.WorkingDirectory = WScript.Arguments(1^)
+    echo oLink.Description = "Sistema AutoOS para Oficina Mecanica"
+    echo If CreateObject("Scripting.FileSystemObject"^).FileExists(WScript.Arguments(2^)^) Then
+    echo     oLink.IconLocation = WScript.Arguments(2^)
+    echo Else
+    echo     oLink.IconLocation = "shell32.dll,41"
+    echo End If
+    echo oLink.Save
+)
 
-cscript //nologo "%VBS_SHORTCUT%" >nul 2>nul
+cscript //nologo "%VBS_SHORTCUT%" "%SCRIPT_DIR%AutoOS_Launcher.vbs" "%SCRIPT_DIR%" "%SCRIPT_DIR%dist\favicon.ico" >nul 2>nul
 if exist "%VBS_SHORTCUT%" del /f /q "%VBS_SHORTCUT%"
 
 :: 5. INICIAR O SISTEMA VIA LAUNCHER EM JANELA NATIVA (SEM TELA PRETA)

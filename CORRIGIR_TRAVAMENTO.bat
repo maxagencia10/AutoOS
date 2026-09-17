@@ -25,7 +25,12 @@ echo.
 echo [2/3] Verificando pacote de producao otimizado...
 if not exist "dist\index.html" (
     echo Compilando versao otimizada (dist)... Por favor aguarde...
-    call npm run build
+    if exist "GERAR_DIST_AGORA.bat" (
+        call GERAR_DIST_AGORA.bat
+    ) else (
+        call npm install
+        call npm run build
+    )
 ) else (
     echo [OK] Versao otimizada pronta para uso imediato!
 )
