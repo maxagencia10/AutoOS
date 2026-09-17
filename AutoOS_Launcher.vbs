@@ -8,17 +8,17 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 Set wsh = CreateObject("WScript.Shell")
 
 currentDir = fso.GetParentFolderName(WScript.ScriptFullName)
+wsh.CurrentDirectory = currentDir
 appUrl = "http://127.0.0.1:3000"
 
 ' 1. Verificar se a pasta dist essencial existe
 If Not fso.FileExists(currentDir & "\dist\index.html") Then
     resp = MsgBox("A pasta compilada 'dist' do AutoOS ainda nao existe nesta instalacao." & vbCrLf & vbCrLf & _
-                  "Pasta atual: " & currentDir & vbCrLf & vbCrLf & _
                   "Deseja gerar os arquivos agora automaticamente?" & vbCrLf & _
-                  "(Uma janela sera aberta para compilar tudo em cerca de 1 minuto).", _
+                  "(Uma janela sera aberta para instalar tudo e compilar o sistema).", _
                   vbQuestion + vbYesNo, "AutoOS - Preparar Arquivos")
     If resp = vbYes Then
-        wsh.Run "cmd /c """ & currentDir & "\GERAR_DIST_AGORA.bat""", 1, True
+        wsh.Run "cmd /c GERAR_DIST_AGORA.bat", 1, True
         If Not fso.FileExists(currentDir & "\dist\index.html") Then
             WScript.Quit 1
         End If

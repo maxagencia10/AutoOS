@@ -1,154 +1,129 @@
 @echo off
+setlocal EnableDelayedExpansion
 chcp 65001 >nul
-title AutoOS - Instalador Automático
+title AutoOS - Instalador Completo para Oficina Mecanica
 color 0C
-
-set "SILENT_MODE=0"
-if "%~1"=="/silent" set "SILENT_MODE=1"
-if "%~1"=="-s" set "SILENT_MODE=1"
 
 set "SCRIPT_DIR=%~dp0"
 cd /d "%SCRIPT_DIR%"
 
-if "%SILENT_MODE%"=="0" (
-    echo ===============================================================================
-    echo                AUTOOS - GESTAO DE OFICINA MECANICA (INSTALADOR)
-    echo ===============================================================================
-    echo.
-    echo Configurando o sistema no computador... Aguarde alguns instantes.
-    echo.
-)
+echo ===============================================================================
+echo            AUTOOS - GESTAO DE OFICINA MECANICA (INSTALADOR)
+echo ===============================================================================
+echo.
+echo Este assistente instalara e configurara o AutoOS no seu computador.
+echo Se forem exibidas janelas solicitando confirmacao, clique em 'SIM'.
+echo.
 
-:: 1. DETECCAO DO NODE.JS (EMBUTIDO / INSTALADOR LOCAL / SISTEMA / WINGET)
-set "NODE_CMD="
+:: 1. VERIFICAR OU INSTALAR O NODE.JS AUTOMATICAMENTE
+echo [1/4] Verificando ambiente Node.js...
+set "NODE_OK=0"
 
-:: A) Verifica se ha Node.js portatil embutido na pasta
-if exist "%SCRIPT_DIR%runtime\node.exe" (
-    set "NODE_CMD=%SCRIPT_DIR%runtime\node.exe"
-    goto :NODE_FOUND
-)
-if exist "%SCRIPT_DIR%node\node.exe" (
-    set "NODE_CMD=%SCRIPT_DIR%node\node.exe"
-    goto :NODE_FOUND
-)
-
-:: B) Verifica se ha instalador .msi colocado na pasta do pen drive para instalacao silenciosa
-for %%f in ("%SCRIPT_DIR%node*.msi" "%SCRIPT_DIR%instalador\node*.msi" "%SCRIPT_DIR%instaladores\node*.msi") do (
-    if exist "%%~ff" (
-        if "%SILENT_MODE%"=="0" echo [1/4] Instalando pacote Node.js embutido silenciosamente...
-        start /wait msiexec /i "%%~ff" /qn /norestart
-        timeout /t 2 >nul
-    )
-)
-
-:: C) Verifica instalacao padrao no Windows
-if exist "%ProgramFiles%\nodejs\node.exe" (
-    set "NODE_CMD=%ProgramFiles%\nodejs\node.exe"
-    set "PATH=%ProgramFiles%\nodejs;%PATH%"
-    goto :NODE_FOUND
-)
-if exist "%ProgramFiles(x86)%\nodejs\node.exe" (
-    set "NODE_CMD=%ProgramFiles(x86)%\nodejs\node.exe"
-    set "PATH=%ProgramFiles(x86)%\nodejs;%PATH%"
-    goto :NODE_FOUND
-)
-if exist "%LocalAppData%\Programs\node\node.exe" (
-    set "NODE_CMD=%LocalAppData%\Programs\node\node.exe"
-    set "PATH=%LocalAppData%\Programs\node;%PATH%"
-    goto :NODE_FOUND
-)
-
-:: D) Verifica via comando where node
 where node >nul 2>nul
-if %errorlevel% equ 0 (
-    set "NODE_CMD=node"
-    goto :NODE_FOUND
-)
+if %errorlevel% equ 0 set "NODE_OK=1"
 
-:: E) Tentativa via winget
-where winget >nul 2>nul
-if %errorlevel% equ 0 (
-    if "%SILENT_MODE%"=="0" echo [1/4] Instalando Node.js via winget...
-    winget install OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements >nul 2>nul
+if "%NODE_OK%"=="0" (
     if exist "%ProgramFiles%\nodejs\node.exe" (
-        set "NODE_CMD=%ProgramFiles%\nodejs\node.exe"
         set "PATH=%ProgramFiles%\nodejs;%PATH%"
-        goto :NODE_FOUND
+        set "NODE_OK=1"
+    ) else if exist "%ProgramFiles(x86)%\nodejs\node.exe" (
+        set "PATH=%ProgramFiles(x86)%\nodejs;%PATH%"
+        set "NODE_OK=1"
+    ) else if exist "%LocalAppData%\Programs\node\node.exe" (
+        set "PATH=%LocalAppData%\Programs\node;%PATH%"
+        set "NODE_OK=1"
     )
 )
 
-:: Se nao encontrou de nenhuma forma
-if "%NODE_CMD%"=="" (
-    if "%SILENT_MODE%"=="0" (
+if "%NODE_OK%"=="0" (
+    echo.
+    echo [!] Node.js nao encontrado. Baixando instalador oficial do Node.js (v20 LTS)...
+    echo Aguarde o download terminar (cerca de 30 MB)...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object System.Net.WebClient).DownloadFile('https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi', '%TEMP%\node_setup.msi')"
+    
+    if exist "%TEMP%\node_setup.msi" (
+        echo Instalando o Node.js no sistema...
+        echo Se o Windows pedir confirmacao de administrador, clique em 'SIM'.
+        start /wait msiexec /i "%TEMP%\node_setup.msi" /passive /norestart
+        del /f /q "%TEMP%\node_setup.msi" >nul 2>nul
+        
+        if exist "%ProgramFiles%\nodejs\node.exe" (
+            set "PATH=%ProgramFiles%\nodejs;%PATH%"
+            set "NODE_OK=1"
+        )
+    )
+)
+
+where node >nul 2>nul
+if %errorlevel% neq 0 (
+    if "%NODE_OK%"=="0" (
         echo.
-        echo [!] O Node.js nao foi detectado no sistema.
-        echo Voce pode colocar o arquivo instalador do Node (ex: node-v20-x64.msi)
-        echo dentro desta mesma pasta para instalacao 100%% automatica no pen drive.
+        echo [ERRO] Nao foi possivel instalar o Node.js automaticamente.
+        echo Baixe o instalador oficial gratuito em https://nodejs.org e tente novamente.
         echo.
         pause
+        exit /b 1
     )
-    exit /b 1
 )
 
-:NODE_FOUND
-if "%SILENT_MODE%"=="0" echo [1/4] Ambiente Node.js verificado com sucesso.
+echo [OK] Node.js pronto para uso!
+echo.
 
-:: 2. LIBERAR PORTA 3000 DE EXECUCOES ANTERIORES
-if "%SILENT_MODE%"=="0" echo [2/4] Liberando porta 3000...
+:: 2. LIBERAR PORTA 3000
+echo [2/4] Liberando porta 3000 de processos anteriores...
 for /f "tokens=5" %%p in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING 2^>nul') do (
     taskkill /F /PID %%p >nul 2>nul
 )
+echo [OK] Porta 3000 liberada!
+echo.
 
-:: 3. VERIFICAR PACOTE DE PRODUCAO OTIMIZADO
-if "%SILENT_MODE%"=="0" echo [3/4] Verificando arquivos do AutoOS...
-if not exist "%SCRIPT_DIR%dist\index.html" (
-    if "%SILENT_MODE%"=="0" (
-        echo.
-        echo [AVISO] Pasta dist nao encontrada. Compilando pacote otimizado...
-        echo Isso e feito de forma automatica agora.
-    )
-    if exist "%SCRIPT_DIR%GERAR_DIST_AGORA.bat" (
-        call "%SCRIPT_DIR%GERAR_DIST_AGORA.bat"
-    ) else (
+:: 3. VERIFICAR ARQUIVOS DA PASTA 'dist' OU COMPILAR
+echo [3/4] Verificando arquivos do AutoOS...
+if not exist "dist\index.html" (
+    echo.
+    echo A pasta 'dist' nao foi encontrada. Preparando os arquivos...
+    if not exist "node_modules\vite" (
+        echo Instalando modulos do projeto (primeira vez, aguarde cerca de 1 minuto)...
         call npm install
-        call npm run build
+        if !errorlevel! neq 0 (
+            call npm install --force
+        )
     )
+    echo Compilando arquivos de alta velocidade...
+    call npm run build
 )
+
+if not exist "dist\index.html" (
+    echo.
+    echo [ERRO] Nao foi possivel compilar a pasta 'dist'.
+    echo Verifique se ha erros exibidos acima.
+    echo.
+    pause
+    exit /b 1
+)
+echo [OK] Arquivos do sistema verificados com sucesso!
+echo.
 
 :: 4. CRIAR ATALHO NA AREA DE TRABALHO
-if "%SILENT_MODE%"=="0" echo [4/4] Criando atalho na Area de Trabalho do cliente...
-set "VBS_SHORTCUT=%TEMP%\criar_atalho_autoos.vbs"
+echo [4/4] Criando atalho "AutoOS Oficina" na Area de Trabalho...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $d = [Environment]::GetFolderPath('Desktop'); $lnk = $ws.CreateShortcut((Join-Path $d 'AutoOS Oficina.lnk')); $lnk.TargetPath = '%SystemRoot%\System32\wscript.exe'; $lnk.Arguments = '\"' + (Join-Path (Get-Location).Path 'AutoOS_Launcher.vbs') + '\"'; $lnk.WorkingDirectory = (Get-Location).Path; $lnk.Description = 'AutoOS - Gestao de Oficina Mecanica'; $ico = Join-Path (Get-Location).Path 'dist\favicon.ico'; if (Test-Path $ico) { $lnk.IconLocation = $ico }; $lnk.Save()" >nul 2>nul
 
-> "%VBS_SHORTCUT%" (
-    echo Set oWS = WScript.CreateObject("WScript.Shell"^)
-    echo sLinkFile = oWS.SpecialFolders("Desktop"^) ^& "\AutoOS Oficina.lnk"
-    echo Set oLink = oWS.CreateShortcut(sLinkFile^)
-    echo oLink.TargetPath = "%SystemRoot%\System32\wscript.exe"
-    echo oLink.Arguments = """" ^& WScript.Arguments(0^) ^& """"
-    echo oLink.WorkingDirectory = WScript.Arguments(1^)
-    echo oLink.Description = "Sistema AutoOS para Oficina Mecanica"
-    echo If CreateObject("Scripting.FileSystemObject"^).FileExists(WScript.Arguments(2^)^) Then
-    echo     oLink.IconLocation = WScript.Arguments(2^)
-    echo Else
-    echo     oLink.IconLocation = "shell32.dll,41"
-    echo End If
-    echo oLink.Save
-)
+echo [OK] Atalho criado na sua Area de Trabalho!
+echo.
+echo ===============================================================================
+echo                     INSTALACAO CONCLUIDA COM SUCESSO!
+echo ===============================================================================
+echo O sistema AutoOS foi instalado e configurado no seu computador.
+echo Iniciando o AutoOS em 3 segundos...
+echo ===============================================================================
+timeout /t 3 >nul
 
-cscript //nologo "%VBS_SHORTCUT%" "%SCRIPT_DIR%AutoOS_Launcher.vbs" "%SCRIPT_DIR%" "%SCRIPT_DIR%dist\favicon.ico" >nul 2>nul
-if exist "%VBS_SHORTCUT%" del /f /q "%VBS_SHORTCUT%"
-
-:: 5. INICIAR O SISTEMA VIA LAUNCHER EM JANELA NATIVA (SEM TELA PRETA)
-start "" "%SystemRoot%\System32\wscript.exe" "%SCRIPT_DIR%AutoOS_Launcher.vbs"
-
-if "%SILENT_MODE%"=="0" (
-    echo.
-    echo ===============================================================================
-    echo  [OK] INSTALACAO CONCLUIDA COM SUCESSO!
-    echo  O atalho "AutoOS Oficina" foi criado na sua Area de Trabalho.
-    echo  O sistema esta sendo aberto em janela propria agora.
-    echo ===============================================================================
-    timeout /t 3 >nul
+:: Inicia o sistema
+if exist "AutoOS_Launcher.vbs" (
+    start "" "%SystemRoot%\System32\wscript.exe" "AutoOS_Launcher.vbs"
+) else (
+    start "" http://127.0.0.1:3000
+    node servidor.cjs
 )
 
 exit /b 0

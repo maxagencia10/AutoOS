@@ -124,4 +124,18 @@ server.listen(PORT, HOST, () => {
   console.log('===================================================================\n');
   console.log('Voce ja pode usar o sistema no seu navegador.');
   console.log('Mantenha esta janela aberta enquanto a oficina estiver utilizando o AutoOS.\n');
+
+  if (process.env.AUTO_OPEN !== 'false') {
+    const targetUrl = `http://127.0.0.1:${PORT}`;
+    const { exec } = require('child_process');
+    if (process.platform === 'win32') {
+      exec(`start msedge --app="${targetUrl}"`, (err) => {
+        if (err) {
+          exec(`start "" "${targetUrl}"`);
+        }
+      });
+    } else {
+      exec(`xdg-open "${targetUrl}"`);
+    }
+  }
 });

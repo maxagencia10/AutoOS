@@ -6,6 +6,13 @@ color 0A
 set "SCRIPT_DIR=%~dp0"
 cd /d "%SCRIPT_DIR%"
 
+:: Se a pasta dist ainda não existir, direciona para o preparador completo
+if not exist "dist\index.html" (
+    echo [AVISO] O AutoOS precisa ser preparado na primeira execucao.
+    call GERAR_DIST_AGORA.bat
+    exit /b 0
+)
+
 :: Tenta abrir diretamente pelo Launcher nativo (janela de aplicativo sem tela preta)
 if exist "%SCRIPT_DIR%AutoOS_Launcher.vbs" (
     start "" "%SystemRoot%\System32\wscript.exe" "%SCRIPT_DIR%AutoOS_Launcher.vbs"
