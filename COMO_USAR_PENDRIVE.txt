@@ -14,11 +14,12 @@
      de forma 100% automatica e silenciosa!
 
 3. COMO INSTALAR NO CLIENTE:
-   - Para instalacao 100% invisivel (sem tela preta do prompt):
+   - Para instalacao 100% invisivel (sem tela preta do prompt do inicio ao fim):
      De 2 cliques em "INSTALAR_SILENCIOSO.vbs"
    
-   - Ou para instalacao tradicional acompanhando o progresso:
-     De 2 cliques em "INSTALAR_AUTOOS.bat"
+   - Ou para instalacao visual acompanhando as etapas:
+     De 2 cliques em "INSTALAR_AUTOOS.bat" (ao concluir com sucesso, a janela
+     se fecha automaticamente em 3s e o servidor permanece ativo em segundo plano invisivel!)
 
 4. COMO O SISTEMA FUNCIONA PARA O CLIENTE:
    - O instalador cria o atalho "AutoOS Oficina" na Area de Trabalho.

@@ -32,6 +32,8 @@ for /f "tokens=5" %%p in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING 2^
 echo Abrindo navegador...
 start "" cmd /c "timeout /t 2 /nobreak >nul && start http://127.0.0.1:3000"
 
-echo Iniciando servidor local...
-node servidor.cjs
-pause
+echo Iniciando servidor local em segundo plano oculto...
+powershell -NoProfile -Command "Start-Process node -ArgumentList 'servidor.cjs' -WindowStyle Hidden"
+echo [OK] Servidor ativo em segundo plano! Nenhuma janela precisa ficar aberta.
+timeout /t 2 >nul
+exit /b 0
