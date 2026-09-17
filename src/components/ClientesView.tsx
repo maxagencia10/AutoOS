@@ -32,6 +32,7 @@ import {
 } from '../utils/formatters';
 import { consultarCep, formatarCep } from '../utils/cep';
 import { useAuth } from '../context/AuthContext';
+import { ModalCadastroVeiculoRapido } from './ModalCadastroVeiculoRapido';
 
 interface ClientesViewProps {
   onVisualizarOS: (os: OrdemServico) => void;
@@ -101,6 +102,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
   const [veiculosCliente, setVeiculosCliente] = useState<Veiculo[]>([]);
   const [osCliente, setOsCliente] = useState<OrdemServico[]>([]);
   const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+  const [modalNovoVeiculoClienteOpen, setModalNovoVeiculoClienteOpen] = useState(false);
 
   useEffect(() => {
     carregarClientes();
@@ -633,13 +635,34 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
             <div className="overflow-y-auto flex-1 py-4 space-y-6">
               {/* Veículos Vinculados */}
               <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-3">
-                  <Car className="w-4 h-4 text-red-500" />
-                  <span>Veículos Vinculados ({veiculosCliente.length})</span>
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Car className="w-4 h-4 text-red-500" />
+                    <span>Veículos Vinculados ({veiculosCliente.length})</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setModalNovoVeiculoClienteOpen(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 border border-red-500/40 rounded-lg text-xs font-semibold transition"
+                    title="Cadastrar novo ou mais um veículo para este cliente"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Cadastrar Veículo</span>
+                  </button>
+                </div>
 
                 {veiculosCliente.length === 0 ? (
-                  <p className="text-xs text-zinc-500 italic">Nenhum veículo vinculado a este cliente.</p>
+                  <div className="bg-zinc-950 border border-dashed border-zinc-800 rounded-xl p-4 text-center space-y-2">
+                    <p className="text-xs text-zinc-400">Nenhum veículo vinculado a este cliente ainda.</p>
+                    <button
+                      type="button"
+                      onClick={() => setModalNovoVeiculoClienteOpen(true)}
+                      className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg text-xs transition inline-flex items-center gap-1.5 shadow"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Cadastrar Primeiro Veículo</span>
+                    </button>
+                  </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {veiculosCliente.map((v) => (
@@ -729,6 +752,19 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Cadastro de Veículo para o Cliente Visualizado */}
+      {detalheCliente && (
+        <ModalCadastroVeiculoRapido
+          isOpen={modalNovoVeiculoClienteOpen}
+          onClose={() => setModalNovoVeiculoClienteOpen(false)}
+          cliente={detalheCliente}
+          onVeiculoCadastrado={(novo) => {
+            setVeiculosCliente((prev) => [...prev, novo]);
+            carregarClientes();
+          }}
+        />
       )}
 
     </div>

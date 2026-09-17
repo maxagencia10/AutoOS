@@ -12,6 +12,7 @@ import {
   X,
   AlertCircle,
   TrendingUp,
+  Sparkles,
 } from 'lucide-react';
 import { Veiculo, Cliente, OrdemServico } from '../types';
 import {
@@ -26,6 +27,7 @@ import {
   getStatusBadgeInfo,
 } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
+import { detectarMarcaPorModelo, CATALOGO_VEICULOS } from '../utils/veiculoMarcas';
 
 interface VeiculosViewProps {
   onVisualizarOS: (os: OrdemServico) => void;
@@ -63,6 +65,8 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
   });
   const [erroForm, setErroForm] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [marcaDetectada, setMarcaDetectada] = useState<string | null>(null);
+  const [marcaEditadaManualmente, setMarcaEditadaManualmente] = useState(false);
 
   // Modal de Histórico do Veículo (Section 28)
   const [detalheVeiculo, setDetalheVeiculo] = useState<Veiculo | null>(null);
@@ -110,6 +114,8 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
       placa: '',
       quilometragem: 0,
     });
+    setMarcaDetectada(null);
+    setMarcaEditadaManualmente(false);
     setErroForm('');
     setModalOpen(true);
   };
@@ -125,8 +131,30 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
       placa: v.placa,
       quilometragem: v.quilometragem,
     });
+    setMarcaDetectada(null);
+    setMarcaEditadaManualmente(true);
     setErroForm('');
     setModalOpen(true);
+  };
+
+  const handleModeloChange = (valor: string) => {
+    const deteccao = detectarMarcaPorModelo(valor);
+    if (deteccao) {
+      setMarcaDetectada(deteccao.marca);
+      setFormData((prev) => {
+        const deveAtualizarMarca = !marcaEditadaManualmente || !prev.marca || prev.marca === marcaDetectada;
+        return {
+          ...prev,
+          veiculo: valor,
+          marca: deveAtualizarMarca ? deteccao.marca : prev.marca,
+        };
+      });
+    } else {
+      if (!valor.trim()) {
+        setMarcaDetectada(null);
+      }
+      setFormData((prev) => ({ ...prev, veiculo: valor }));
+    }
   };
 
   const salvarVeiculo = async (e: React.FormEvent) => {
@@ -388,31 +416,65 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
-                  <label className="block text-zinc-400 font-medium mb-1">
-                    Veículo (Modelo / Versão) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Civic 2.0 EXL, Gol 1.6 MSI"
-                    value={formData.veiculo}
-                    onChange={(e) => setFormData({ ...formData, veiculo: e.target.value })}
-                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-zinc-400 font-medium">
+                      Veículo (Modelo / Versão) <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[11px] text-zinc-400 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-400" />
+                      <span>Busca e preenchimento automático da marca</span>
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      list="modelos-sugeridos-veiculos-view"
+                      placeholder="Ex: Civic 2.0 EXL, Gol 1.6 MSI, Onix Plus..."
+                      value={formData.veiculo}
+                      onChange={(e) => handleModeloChange(e.target.value)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500"
+                    />
+                    <datalist id="modelos-sugeridos-veiculos-view">
+                      {CATALOGO_VEICULOS.slice(0, 100).map((c) => (
+                        <option key={`view-${c.modelo}-${c.marca}`} value={c.modelo}>
+                          {c.marca}
+                        </option>
+                      ))}
+                    </datalist>
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-zinc-400 font-medium mb-1">
-                    Marca / Montadora <span className="text-red-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-zinc-400 font-medium">
+                      Marca / Montadora <span className="text-red-500">*</span>
+                    </label>
+                    {marcaDetectada && (
+                      <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1 bg-emerald-950/60 border border-emerald-800/80 px-1.5 py-0.5 rounded">
+                        <Sparkles className="w-2.5 h-2.5" />
+                        Automática
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     required
                     placeholder="Ex: Honda, Volkswagen, Toyota"
                     value={formData.marca}
-                    onChange={(e) => setFormData({ ...formData, marca: e.target.value })}
-                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500"
+                    onChange={(e) => {
+                      setFormData({ ...formData, marca: e.target.value });
+                      setMarcaEditadaManualmente(true);
+                    }}
+                    className={`w-full px-3 py-2 bg-zinc-950 border rounded-lg text-white focus:outline-none focus:border-red-500 ${
+                      marcaDetectada && !marcaEditadaManualmente ? 'border-emerald-700/80 ring-1 ring-emerald-500/30' : 'border-zinc-800'
+                    }`}
                   />
+                  {marcaDetectada && !marcaEditadaManualmente && (
+                    <p className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
+                      <span>✓ Montadora <strong>{marcaDetectada}</strong> detectada pelo modelo</span>
+                    </p>
+                  )}
                 </div>
 
                 <div>

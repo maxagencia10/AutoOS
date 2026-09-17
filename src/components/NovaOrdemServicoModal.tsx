@@ -34,6 +34,7 @@ import {
   formatCpfCnpj,
 } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
+import { ModalCadastroVeiculoRapido } from './ModalCadastroVeiculoRapido';
 
 interface NovaOrdemServicoModalProps {
   osParaEditar?: OrdemServico | null;
@@ -66,6 +67,8 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
 
   const [clienteId, setClienteId] = useState('');
   const [veiculoId, setVeiculoId] = useState('');
+  const [modalNovoVeiculoOpen, setModalNovoVeiculoOpen] = useState(false);
+  const [feedbackVeiculoCriado, setFeedbackVeiculoCriado] = useState<string | null>(null);
 
   // Cliente e Veículo selecionados
   const clienteSelecionado = clientes.find((c) => c.id === clienteId) || null;
@@ -202,6 +205,31 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
         setQuilometragem(veic.quilometragem);
       }
     }
+  };
+
+  const handleVeiculoSelectChange = (vId: string) => {
+    if (vId === '__CADASTRAR_NOVO_VEICULO__') {
+      setModalNovoVeiculoOpen(true);
+      return;
+    }
+    handleVeiculoChange(vId);
+  };
+
+  const handleNovoVeiculoCadastrado = (novoVeiculo: Veiculo) => {
+    setVeiculosDisponiveis((prev) => {
+      const existe = prev.some((v) => v.id === novoVeiculo.id);
+      if (existe) return prev.map((v) => (v.id === novoVeiculo.id ? novoVeiculo : v));
+      return [...prev, novoVeiculo];
+    });
+    setVeiculoId(novoVeiculo.id);
+    setKmAnterior(novoVeiculo.quilometragem);
+    setQuilometragem(novoVeiculo.quilometragem);
+    setFeedbackVeiculoCriado(
+      `Veículo ${novoVeiculo.marca} ${novoVeiculo.veiculo} (${formatPlaca(novoVeiculo.placa)}) cadastrado e selecionado com sucesso!`
+    );
+    setTimeout(() => {
+      setFeedbackVeiculoCriado(null);
+    }, 6000);
   };
 
   // Gerenciamento dinâmico de itens
@@ -486,32 +514,107 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
 
             {/* Bloco Veículo e Quilometragem (Section 8 e 12) */}
             <div className="bg-zinc-950/90 border border-zinc-800 rounded-xl p-4 space-y-3">
-              <div className="flex items-center gap-2 text-zinc-200 font-bold">
-                <Car className="w-4 h-4 text-red-500" />
-                <span>Identificação do Veículo</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-zinc-200 font-bold">
+                  <Car className="w-4 h-4 text-red-500" />
+                  <span>Identificação do Veículo</span>
+                </div>
+                {clienteSelecionado && (
+                  <button
+                    type="button"
+                    onClick={() => setModalNovoVeiculoOpen(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 border border-red-500/40 rounded-lg text-xs font-semibold transition shadow-sm"
+                    title="Cadastrar novo ou mais um veículo para este cliente"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Cadastrar Veículo</span>
+                  </button>
+                )}
               </div>
 
-              <div>
-                <label className="block text-zinc-400 font-medium mb-1">
-                  Selecionar Veículo do Cliente <span className="text-red-500">*</span>
-                </label>
-                <select
-                  required
-                  disabled={!clienteId}
-                  value={veiculoId}
-                  onChange={(e) => handleVeiculoChange(e.target.value)}
-                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 disabled:opacity-50"
-                >
-                  <option value="">
-                    {clienteId ? 'Selecione um veículo cadastrado...' : 'Selecione o cliente primeiro'}
-                  </option>
-                  {veiculosDisponiveis.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.veiculo} ({formatPlaca(v.placa)}) - {v.marca} {v.ano}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Feedback visual de veículo recém-cadastrado */}
+              {feedbackVeiculoCriado && (
+                <div className="p-2.5 bg-emerald-950/80 border border-emerald-800 rounded-lg text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
+                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{feedbackVeiculoCriado}</span>
+                </div>
+              )}
+
+              {!clienteId ? (
+                <div className="p-3 bg-zinc-900/60 border border-dashed border-zinc-800 rounded-lg text-xs text-zinc-500 flex items-center gap-2">
+                  <Car className="w-4 h-4 text-zinc-600 shrink-0" />
+                  <span>Selecione o cliente ao lado para carregar os veículos cadastrados ou registrar um novo veículo.</span>
+                </div>
+              ) : veiculosDisponiveis.length === 0 ? (
+                /* Caso o cliente ainda não possua nenhum veículo cadastrado */
+                <div className="bg-amber-950/30 border border-amber-800/60 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-start gap-2.5 text-amber-300 font-semibold text-xs">
+                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <div>Nenhum veículo cadastrado para este cliente</div>
+                      <p className="text-zinc-400 font-normal mt-0.5 text-xs">
+                        O cliente <strong className="text-zinc-200">{clienteSelecionado?.nome}</strong> ainda não possui veículos vinculados.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setModalNovoVeiculoOpen(true)}
+                    className="w-full py-2 px-3 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-bold rounded-lg transition flex items-center justify-center gap-2 text-xs shadow-md"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Cadastrar Primeiro Veículo do Cliente</span>
+                  </button>
+                </div>
+              ) : (
+                /* Caso o cliente já tenha veículos cadastrados */
+                <div className="space-y-2">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-zinc-400 font-medium text-xs">
+                        Selecionar Veículo do Cliente <span className="text-red-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setModalNovoVeiculoOpen(true)}
+                        className="text-red-400 hover:text-red-300 font-medium text-[11px] flex items-center gap-1 hover:underline underline-offset-2"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Novo ou mais um veículo?</span>
+                      </button>
+                    </div>
+                    <select
+                      required
+                      value={veiculoId}
+                      onChange={(e) => handleVeiculoSelectChange(e.target.value)}
+                      className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500"
+                    >
+                      <option value="">Selecione um veículo cadastrado...</option>
+                      {veiculosDisponiveis.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.veiculo} ({formatPlaca(v.placa)}) - {v.marca} {v.ano}
+                        </option>
+                      ))}
+                      <option value="__CADASTRAR_NOVO_VEICULO__" className="text-red-400 font-bold bg-zinc-900">
+                        ➕ + Cadastrar Novo / Mais um Veículo...
+                      </option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-zinc-400 px-0.5">
+                    <span>
+                      {veiculosDisponiveis.length} {veiculosDisponiveis.length === 1 ? 'veículo registrado' : 'veículos registrados'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setModalNovoVeiculoOpen(true)}
+                      className="text-zinc-400 hover:text-zinc-200 underline underline-offset-2 transition"
+                    >
+                      + Cadastrar outro carro
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {veiculoSelecionado && (
                 <div className="space-y-3">
@@ -833,6 +936,16 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
               </div>
             </div>
           </div>
+        )}
+
+        {/* Modal de Cadastro Rápido de Veículo para o Cliente Selecionado */}
+        {clienteSelecionado && (
+          <ModalCadastroVeiculoRapido
+            isOpen={modalNovoVeiculoOpen}
+            onClose={() => setModalNovoVeiculoOpen(false)}
+            cliente={clienteSelecionado}
+            onVeiculoCadastrado={handleNovoVeiculoCadastrado}
+          />
         )}
 
       </div>
