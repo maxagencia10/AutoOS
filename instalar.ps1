@@ -96,7 +96,10 @@ Write-Host ""
 
 # 3. COMPILAR A PASTA 'dist' DE ALTA PERFORMANCE
 Write-Host "[3/4] Compilando arquivos de producao (pasta dist)..." -ForegroundColor Yellow
-cmd /c "npm run build"
+
+# Compila diretamente usando o Node.js puro (build.cjs), imune ao bug do caractere '&' no Windows
+& node build.cjs
+
 
 if (-not (Test-Path -LiteralPath "dist\index.html")) {
     Write-Host ""
