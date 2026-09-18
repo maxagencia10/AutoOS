@@ -137,58 +137,39 @@ try {
 }
 Write-Host ""
 
-# 5. INICIAR O SISTEMA EM SEGUNDO PLANO (PROCESSO OCULTO)
+# 5. INICIAR O SISTEMA IMEDIATAMENTE
 Write-Host "===============================================================================" -ForegroundColor Cyan
 Write-Host "             AUTOOS INSTALADO E CONFIGURADO COM SUCESSO!" -ForegroundColor Green
 Write-Host "===============================================================================" -ForegroundColor Cyan
-Write-Host "[OK] Iniciando o servidor em SEGUNDO PLANO (processo 100% invisivel)..." -ForegroundColor Yellow
+Write-Host "Iniciando o sistema da oficina agora..." -ForegroundColor White
+Write-Host "Endereco: http://127.0.0.1:3000" -ForegroundColor Gray
+Write-Host "===============================================================================" -ForegroundColor Cyan
+Write-Host ""
 
-$launcherPath = Join-Path (Get-Location).Path "AutoOS_Launcher.vbs"
+Start-Sleep -Seconds 2
+
+# Abre o navegador
 $appUrl = "http://127.0.0.1:3000"
-
-if (Test-Path -LiteralPath $launcherPath) {
-    # Inicia diretamente pelo launcher que roda o servidor oculto e abre em janela de app
-    Start-Process -FilePath "$env:SystemRoot\System32\wscript.exe" -ArgumentList "`"$launcherPath`""
-} else {
-    # Fallback seguro: Inicia o Node.js em processo desacoplado totalmente oculto (WindowStyle Hidden)
-    try {
-        $nodeExe = "node"
-        Start-Process -FilePath $nodeExe -ArgumentList "servidor.cjs" -WorkingDirectory (Get-Location).Path -WindowStyle Hidden
-    } catch {
-        Start-Process -FilePath "node" -ArgumentList "servidor.cjs" -WindowStyle Hidden
+try {
+    $edgePaths = @(
+        "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
+        "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
+        "$env:LocalAppData\Microsoft\Edge\Application\msedge.exe"
+    )
+    $opened = $false
+    foreach ($ep in $edgePaths) {
+        if (Test-Path -LiteralPath $ep) {
+            Start-Process -FilePath $ep -ArgumentList "--app=`"$appUrl`" --start-maximized"
+            $opened = $true
+            break
+        }
     }
-
-    Start-Sleep -Seconds 2
-
-    # Abre a janela do aplicativo
-    try {
-        $edgePaths = @(
-            "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
-            "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
-            "$env:LocalAppData\Microsoft\Edge\Application\msedge.exe"
-        )
-        $opened = $false
-        foreach ($ep in $edgePaths) {
-            if (Test-Path -LiteralPath $ep) {
-                Start-Process -FilePath $ep -ArgumentList "--app=`"$appUrl`" --start-maximized"
-                $opened = $true
-                break
-            }
-        }
-        if (-not $opened) {
-            Start-Process $appUrl
-        }
-    } catch {
+    if (-not $opened) {
         Start-Process $appUrl
     }
+} catch {
+    Start-Process $appUrl
 }
 
-Write-Host "[OK] Sistema carregado com sucesso!" -ForegroundColor Green
-Write-Host "[OK] O processo do servidor permanece ativo em segundo plano." -ForegroundColor White
-Write-Host "[OK] Nenhuma janela ou tela preta precisa ficar visivel para o cliente." -ForegroundColor Cyan
-Write-Host "===============================================================================" -ForegroundColor Cyan
-Write-Host "Fechando esta janela de instalacao em 3 segundos..." -ForegroundColor Gray
-Start-Sleep -Seconds 3
-
-# Encerra o processo da janela do instalador com sucesso (o servidor continua rodando em segundo plano)
-exit 0
+# Roda o servidor localmente
+& node servidor.cjs

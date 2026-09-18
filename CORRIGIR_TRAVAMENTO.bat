@@ -38,22 +38,16 @@ if not exist "dist\index.html" (
 )
 echo.
 
-echo [3/3] Iniciando o servidor em segundo plano (processo oculto)...
+echo [3/3] Iniciando o servidor leve do AutoOS...
 echo.
-
-if exist "AutoOS_Launcher.vbs" (
-    start "" "%SystemRoot%\System32\wscript.exe" "AutoOS_Launcher.vbs"
-) else (
-    powershell -NoProfile -Command "Start-Process node -ArgumentList 'servidor.cjs' -WindowStyle Hidden"
-    start "" cmd /c "timeout /t 2 /nobreak >nul && start http://127.0.0.1:3000"
-)
-
 echo ===============================================================================
-echo  [OK] AutoOS destravado e iniciado com sucesso!
-echo  O servidor esta ativo em segundo plano (processo oculto).
-echo  Nenhuma janela de comando precisa ficar aberta para o cliente.
+echo  AutoOS pronto!
+echo  Acessando: http://127.0.0.1:3000
 echo ===============================================================================
 echo.
-echo Fechando esta janela em 3 segundos...
-timeout /t 3 >nul
-exit /b 0
+
+start "" cmd /c "timeout /t 2 /nobreak >nul && start http://127.0.0.1:3000"
+
+node servidor.cjs
+
+pause

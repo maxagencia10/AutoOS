@@ -12,14 +12,10 @@ Copie a pasta descompactada para o computador do cliente (ex: `C:\AutoOS`) ou ma
 - Verifica o Node.js (se não tiver, baixa o instalador oficial automaticamente).
 - Instala todas as dependências com 1 clique (`npm install`).
 - **Cria automaticamente o atalho "AutoOS Oficina" na Área de Trabalho** do cliente.
-- **Inicia o servidor em segundo plano (processo invisível)** e fecha a janela de instalação automaticamente, sem poluir a tela do cliente.
-- Abre o AutoOS em janela de aplicativo própria em `http://localhost:3000`.
+- Abre o navegador automaticamente em `http://localhost:3000`.
 
 👉 **`INICIAR_AUTOOS.bat`** (No dia a dia)
-- Inicia o sistema rapidamente em segundo plano e abre a janela do aplicativo (sem janela preta de comando).
-
-👉 **`FINALIZAR_AUTOOS.bat`**
-- Encerra o processo do servidor em segundo plano quando desejar fechar completamente.
+- Inicia o sistema rapidamente e abre o navegador.
 
 
 ---
