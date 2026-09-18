@@ -1,6 +1,5 @@
 @echo off
 setlocal
-chcp 65001 >nul
 title AutoOS - Instalador e Preparador do Sistema
 cd /d "%~dp0"
 
@@ -21,5 +20,5 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: Conclusão limpa: fecha a janela sem deixar resíduos visuais para o cliente
+:: Conclusao limpa: fecha a janela sem deixar residuos visuais para o cliente
 exit /b 0

@@ -1,5 +1,4 @@
 @echo off
-chcp 65001 >nul
 title AutoOS - Encerrar Servidor
 color 0C
 

@@ -1,6 +1,5 @@
 @echo off
-chcp 65001 >nul
-title AutoOS - Preparador de Pen Drive (Node Portátil)
+title AutoOS - Preparador de Pen Drive (Node Portatil)
 color 0A
 
 echo ===============================================================================

@@ -1,5 +1,4 @@
 @echo off
-chcp 65001 >nul
 title AutoOS - Destravar e Iniciar Sistema
 color 0A
 
