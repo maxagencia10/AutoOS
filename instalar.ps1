@@ -14,6 +14,12 @@ Write-Host "Este assistente ira configurar tudo automaticamente no seu computado
 Write-Host "Caminho da instalacao: $((Get-Location).Path)" -ForegroundColor Gray
 Write-Host ""
 
+# 0. LIBERAR PORTA E FINALIZAR INSTANCIAS ANTERIORES
+Write-Host "[0/4] Verificando e liberando processos anteriores na porta 3000..." -ForegroundColor Gray
+try {
+    cmd /c "for /f ""tokens=5"" %p in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING 2^>nul') do taskkill /F /PID %p >nul 2^>nul"
+} catch {}
+
 # 1. VERIFICAR OU INSTALAR O NODE.JS
 Write-Host "[1/4] Verificando ambiente Node.js..." -ForegroundColor Yellow
 
@@ -148,7 +154,7 @@ $appUrl = "http://127.0.0.1:3000"
 
 if (Test-Path -LiteralPath $launcherPath) {
     # Inicia diretamente pelo launcher que roda o servidor oculto e abre em janela de app
-    Start-Process -FilePath "$env:SystemRoot\System32\wscript.exe" -ArgumentList "`"$launcherPath`""
+    Start-Process -FilePath "$env:SystemRoot\System32\wscript.exe" -ArgumentList "`"$launcherPath`" /restart"
 } else {
     # Fallback seguro: Inicia o Node.js em processo desacoplado totalmente oculto (WindowStyle Hidden)
     try {

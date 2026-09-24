@@ -59,18 +59,29 @@ If nodePath = "" Then
 End If
 
 ' 3. Verificar se o servidor ja esta rodando
-isRunning = False
-On Error Resume Next
-retCode = wsh.Run("""" & nodePath & """ """ & currentDir & "\verificar_servidor.cjs""", 0, True)
-If retCode = 0 Then
-    isRunning = True
+Dim forceRestart
+forceRestart = False
+If WScript.Arguments.Count > 0 Then
+    If InStr(LCase(WScript.Arguments(0)), "restart") > 0 Or InStr(LCase(WScript.Arguments(0)), "force") > 0 Then
+        forceRestart = True
+    End If
 End If
-On Error GoTo 0
 
-' 4. Se nao estiver rodando, inicia o servidor em segundo plano com log de diagnostico
+isRunning = False
+If Not forceRestart Then
+    On Error Resume Next
+    retCode = wsh.Run("""" & nodePath & """ """ & currentDir & "\verificar_servidor.cjs""", 0, True)
+    If retCode = 0 Then
+        isRunning = True
+    End If
+    On Error GoTo 0
+End If
+
+' 4. Se nao estiver rodando ou foi forcado restart, inicia o servidor em segundo plano com log de diagnostico
 If Not isRunning Then
     ' Libera processos orfaos antigos na porta 3000
     wsh.Run "cmd /c ""for /f ""tokens=5"" %p in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING 2^>nul') do taskkill /F /PID %p >nul 2^>nul""", 0, True
+    WScript.Sleep 200
 
     ' Inicia o servidor direcionando a saida para servidor.log
     wsh.Run "cmd /c """"" & nodePath & """ """ & currentDir & "\servidor.cjs"" > """ & currentDir & "\servidor.log"" 2>&1""", 0, False

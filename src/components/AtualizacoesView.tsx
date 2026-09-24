@@ -272,6 +272,43 @@ export const AtualizacoesView: React.FC<AtualizacoesViewProps> = ({ onVoltar }) 
         </div>
       )}
 
+      {/* Guia Rápido de Atualização do Aplicativo */}
+      <div className="bg-gradient-to-r from-red-950/40 via-zinc-900 to-zinc-900 border border-red-900/40 rounded-2xl p-5 space-y-3 shadow-lg">
+        <div className="flex items-center gap-2.5 text-white font-bold text-sm">
+          <div className="w-7 h-7 rounded-lg bg-red-600 flex items-center justify-center text-white shadow">
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <span>Como aplicar o novo pacote baixado no seu computador (Windows)</span>
+        </div>
+        <p className="text-xs text-zinc-300 leading-relaxed">
+          Se você baixou o pacote inteiro novo com melhorias, basta executar o script de atualização para substituir a versão anterior sem perder seus dados:
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+          <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3">
+            <div className="text-[11px] font-bold text-red-400 font-mono mb-1">Passo 1</div>
+            <p className="text-xs text-zinc-300">
+              Extraia a pasta do novo arquivo <strong className="text-white">ZIP</strong> que você baixou.
+            </p>
+          </div>
+          <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3">
+            <div className="text-[11px] font-bold text-red-400 font-mono mb-1">Passo 2</div>
+            <p className="text-xs text-zinc-300">
+              Dê dois cliques no arquivo <strong className="text-white">ATUALIZAR_AUTOOS.bat</strong> (ou <strong className="text-white">INSTALAR_AUTOOS.bat</strong>).
+            </p>
+          </div>
+          <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-3">
+            <div className="text-[11px] font-bold text-red-400 font-mono mb-1">Passo 3 (Automático)</div>
+            <p className="text-xs text-zinc-300">
+              Ele encerra a versão antiga na memória, atualiza o atalho e abre o sistema com as novas funções!
+            </p>
+          </div>
+        </div>
+        <div className="text-[11px] text-emerald-400 flex items-center gap-1.5 pt-1">
+          <ShieldCheck className="w-4 h-4 shrink-0" />
+          <span>Segurança total: Seus clientes, veículos e ordens de serviço continuam 100% preservados!</span>
+        </div>
+      </div>
+
       {/* Cartões de Status da Versão Atual */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">

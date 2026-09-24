@@ -15,6 +15,13 @@ Copie a pasta descompactada para o computador do cliente (ex: `C:\AutoOS`) ou ma
 - **Inicia o servidor em segundo plano (processo invisível)** e fecha a janela de instalação automaticamente, sem poluir a tela do cliente.
 - Abre o AutoOS em janela de aplicativo própria em `http://localhost:3000`.
 
+👉 **`ATUALIZAR_AUTOOS.bat`** (Para atualizar um sistema já instalado sem perder dados)
+- Encerra versões anteriores que estavam rodando em segundo plano na memória.
+- Atualiza os arquivos compilados da nova versão.
+- Atualiza o atalho da Área de Trabalho.
+- Inicia o sistema com todas as novas funções carregadas imediatamente.
+- **Mantém intactos 100% dos seus clientes, veículos e ordens de serviço!**
+
 👉 **`INICIAR_AUTOOS.bat`** (No dia a dia)
 - Inicia o sistema rapidamente em segundo plano e abre a janela do aplicativo (sem janela preta de comando).
 

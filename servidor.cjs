@@ -52,6 +52,18 @@ const server = http.createServer((req, res) => {
 
   // Parse da URL
   let reqUrl = req.url.split('?')[0];
+
+  if (reqUrl === '/api/info') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({
+      app: 'autoos',
+      dir: path.resolve(__dirname),
+      pid: process.pid,
+      version: '1.1.0'
+    }));
+    return;
+  }
+
   let safePath = path.normalize(decodeURIComponent(reqUrl)).replace(/^(\.\.[\/\\])+/, '');
   let filePath = path.join(DIST_DIR, safePath);
 
@@ -75,11 +87,13 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // Cache longo para assets estáticos com hash, sem cache para index.html
+    // Cache longo para assets estáticos com hash, sem cache para index.html e outros
     if (filePath.includes(path.join('dist', 'assets'))) {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     } else {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
     }
 
     res.writeHead(200, { 'Content-Type': contentType });
