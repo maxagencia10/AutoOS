@@ -30,18 +30,21 @@ export const DocumentoOSImpressao: React.FC<DocumentoOSProps> = ({ os, oficina }
   // Determinar número com padding de 6 dígitos (ex: 000125)
   const numeroFormatado = os.numero_formatado
     ? os.numero_formatado.replace(/\D/g, '').padStart(6, '0')
-    : String(os.numero || 125).padStart(6, '0');
+    : String(os.numero || 1).padStart(6, '0');
 
-  // Valores padrão fiéis ao PDF caso campo esteja vazio
-  const clienteNome = os.cliente_nome || 'Valter Marcelino da Silva Júnior';
-  const clienteEndereco = os.cliente_endereco || 'Rua Valober, nº 464';
-  const clienteCep = os.cliente_cep ? os.cliente_cep.replace(/\D/g, '') : '02442140';
+  // Valores reais da OS sem dados fictícios fixos
+  const clienteNome = os.cliente_nome || 'Cliente não informado';
+  const clienteEndereco = os.cliente_endereco || '-';
+  const clienteCep = os.cliente_cep ? os.cliente_cep.replace(/\D/g, '') : '-';
 
-  const veiculoModelo = os.veiculo_modelo || 'Renault Megane 1.6 16 válvulas';
-  const veiculoAno = os.veiculo_ano || '2000';
-  const veiculoCor = os.veiculo_cor || 'Cinza';
+  const veiculoModelo = os.veiculo_modelo || (os.veiculo_marca ? `${os.veiculo_marca} ${os.veiculo_modelo || ''}` : 'Veículo não informado');
+  const veiculoAno = os.veiculo_ano ? String(os.veiculo_ano) : '-';
+  const veiculoCor = os.veiculo_cor || '-';
+  const veiculoKm = typeof os.quilometragem === 'number' && os.quilometragem > 0
+    ? `${os.quilometragem.toLocaleString('pt-BR')} km`
+    : (os.quilometragem === 0 ? '0 km' : (os.quilometragem ? `${os.quilometragem} km` : '-'));
 
-  const totalCalculado = os.total || os.subtotal || 1600.0;
+  const totalCalculado = typeof os.total === 'number' ? os.total : (typeof os.subtotal === 'number' ? os.subtotal : 0);
 
   return (
     <div
@@ -89,6 +92,10 @@ export const DocumentoOSImpressao: React.FC<DocumentoOSProps> = ({ os, oficina }
                 <span className="font-semibold text-black">{clienteNome}</span>
               </div>
               <div className="flex items-baseline">
+                <span className="font-bold w-20 shrink-0 text-black">Telefone:</span>
+                <span className="text-black font-normal">{os.cliente_whatsapp || os.cliente_telefone || '-'}</span>
+              </div>
+              <div className="flex items-baseline">
                 <span className="font-bold w-20 shrink-0 text-black">Endereço:</span>
                 <span className="text-black font-normal">{clienteEndereco}</span>
               </div>
@@ -114,16 +121,22 @@ export const DocumentoOSImpressao: React.FC<DocumentoOSProps> = ({ os, oficina }
             </div>
             <div className="p-3 text-xs sm:text-sm text-black space-y-1.5 bg-white flex-1">
               <div className="flex items-baseline">
-                <span className="font-bold w-16 shrink-0 text-black">Veículo:</span>
+                <span className="font-bold w-20 shrink-0 text-black">Veículo:</span>
                 <span className="font-semibold text-black">{veiculoModelo}</span>
               </div>
               <div className="flex items-baseline">
-                <span className="font-bold w-16 shrink-0 text-black">Ano:</span>
-                <span className="font-mono text-black font-normal">{veiculoAno}</span>
+                <span className="font-bold w-20 shrink-0 text-black">Placa:</span>
+                <span className="font-mono font-bold text-black uppercase">{os.veiculo_placa ? os.veiculo_placa.toUpperCase() : '-'}</span>
               </div>
               <div className="flex items-baseline">
-                <span className="font-bold w-16 shrink-0 text-black">Cor:</span>
-                <span className="text-black font-normal">{veiculoCor}</span>
+                <span className="font-bold w-20 shrink-0 text-black">KM Atual:</span>
+                <span className="font-mono font-bold text-black">{veiculoKm}</span>
+              </div>
+              <div className="flex items-baseline">
+                <span className="font-bold w-20 shrink-0 text-black">Ano / Cor:</span>
+                <span className="text-black font-normal">
+                  {veiculoAno}{veiculoCor && veiculoCor !== '-' ? ` • ${veiculoCor}` : ''}
+                </span>
               </div>
             </div>
           </div>
@@ -168,41 +181,11 @@ export const DocumentoOSImpressao: React.FC<DocumentoOSProps> = ({ os, oficina }
                   </tr>
                 ))
               ) : (
-                // Exibição padrão fiel aos 4 itens do modelo PDF se não houver itens
-                <>
-                  <tr className="hover:bg-zinc-50">
-                    <td className="px-3.5 py-2 text-black font-medium leading-snug">
-                      Mão de obra da troca da embreagem
-                    </td>
-                    <td className="px-4 py-2 text-center font-bold text-black border-l-2 border-black font-mono">
-                      800,00
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-zinc-50">
-                    <td className="px-3.5 py-2 text-black font-medium leading-snug">
-                      Mão de obra da troca dos batentes dos amortecedores dianteiro
-                    </td>
-                    <td className="px-4 py-2 text-center font-bold text-black border-l-2 border-black font-mono">
-                      400,00
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-zinc-50">
-                    <td className="px-3.5 py-2 text-black font-medium leading-snug">
-                      Mão de obra dos retentores e junta do car e troca das velas
-                    </td>
-                    <td className="px-4 py-2 text-center font-bold text-black border-l-2 border-black font-mono">
-                      300,00
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-zinc-50">
-                    <td className="px-3.5 py-2 text-black font-medium leading-snug">
-                      Troca da junta homocinetica
-                    </td>
-                    <td className="px-4 py-2 text-center font-bold text-black border-l-2 border-black font-mono">
-                      100,00
-                    </td>
-                  </tr>
-                </>
+                <tr>
+                  <td colSpan={2} className="px-4 py-4 text-center text-zinc-500 italic">
+                    Nenhum item ou serviço discriminado nesta ordem de serviço.
+                  </td>
+                </tr>
               )}
             </tbody>
 
@@ -234,10 +217,10 @@ export const DocumentoOSImpressao: React.FC<DocumentoOSProps> = ({ os, oficina }
             </span>
           </div>
           <div className="p-3 bg-white text-xs sm:text-sm text-black min-h-[46px] font-medium leading-relaxed">
-            {os.observacoes ? (
-              <span>{os.observacoes}</span>
+            {os.observacoes && os.observacoes.trim() ? (
+              <span className="whitespace-pre-wrap">{os.observacoes}</span>
             ) : (
-              <span>Obs: Cliente trouxe as peças.</span>
+              <span className="text-zinc-400 font-normal italic">Nenhuma observação registrada.</span>
             )}
           </div>
         </div>

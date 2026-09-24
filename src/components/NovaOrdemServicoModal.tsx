@@ -35,6 +35,7 @@ import {
 } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
 import { ModalCadastroVeiculoRapido } from './ModalCadastroVeiculoRapido';
+import { ModalCadastroClienteRapido } from './ModalCadastroClienteRapido';
 
 interface NovaOrdemServicoModalProps {
   osParaEditar?: OrdemServico | null;
@@ -66,6 +67,8 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
   );
 
   const [clienteId, setClienteId] = useState('');
+  const [modalNovoClienteOpen, setModalNovoClienteOpen] = useState(false);
+  const [feedbackClienteCriado, setFeedbackClienteCriado] = useState<string | null>(null);
   const [veiculoId, setVeiculoId] = useState('');
   const [modalNovoVeiculoOpen, setModalNovoVeiculoOpen] = useState(false);
   const [feedbackVeiculoCriado, setFeedbackVeiculoCriado] = useState<string | null>(null);
@@ -205,6 +208,31 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
         setQuilometragem(veic.quilometragem);
       }
     }
+  };
+
+  const handleClienteSelectChange = (cId: string) => {
+    if (cId === '__CADASTRAR_NOVO_CLIENTE__') {
+      setModalNovoClienteOpen(true);
+      return;
+    }
+    handleClienteChange(cId);
+  };
+
+  const handleClienteCadastrado = (novoCliente: Cliente) => {
+    setClientes((prev) => {
+      const existe = prev.some((c) => c.id === novoCliente.id);
+      if (existe) return prev.map((c) => (c.id === novoCliente.id ? novoCliente : c));
+      return [...prev, novoCliente];
+    });
+    setClienteId(novoCliente.id);
+    setVeiculoId('');
+    setVeiculosDisponiveis([]);
+    setFeedbackClienteCriado(
+      `Cliente "${novoCliente.nome}" cadastrado e selecionado com sucesso!`
+    );
+    setTimeout(() => {
+      setFeedbackClienteCriado(null);
+    }, 6000);
   };
 
   const handleVeiculoSelectChange = (vId: string) => {
@@ -474,10 +502,29 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
             
             {/* Bloco Cliente (Section 11) */}
             <div className="bg-zinc-950/90 border border-zinc-800 rounded-xl p-4 space-y-3">
-              <div className="flex items-center gap-2 text-zinc-200 font-bold">
-                <User className="w-4 h-4 text-red-500" />
-                <span>Identificação do Cliente</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-zinc-200 font-bold">
+                  <User className="w-4 h-4 text-red-500" />
+                  <span>Identificação do Cliente</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setModalNovoClienteOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 border border-red-500/40 rounded-lg text-xs font-semibold transition shadow-sm"
+                  title="Cadastrar novo cliente imediatamente"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Cadastrar Cliente</span>
+                </button>
               </div>
+
+              {/* Feedback visual de cliente recém-cadastrado */}
+              {feedbackClienteCriado && (
+                <div className="p-2.5 bg-emerald-950/80 border border-emerald-800 rounded-lg text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
+                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{feedbackClienteCriado}</span>
+                </div>
+              )}
 
               <div>
                 <label className="block text-zinc-400 font-medium mb-1">
@@ -486,10 +533,15 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
                 <select
                   required
                   value={clienteId}
-                  onChange={(e) => handleClienteChange(e.target.value)}
+                  onChange={(e) => handleClienteSelectChange(e.target.value)}
                   className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500"
                 >
-                  <option value="">Selecione um cliente...</option>
+                  <option value="">
+                    {clientes.length === 0 ? 'Nenhum cliente cadastrado...' : 'Selecione um cliente...'}
+                  </option>
+                  <option value="__CADASTRAR_NOVO_CLIENTE__" className="text-red-400 font-bold bg-zinc-800">
+                    + Cadastrar Novo Cliente...
+                  </option>
                   {clientes.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.nome} {c.cpf_cnpj ? `(${c.cpf_cnpj})` : ''}
@@ -497,6 +549,28 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
                   ))}
                 </select>
               </div>
+
+              {clientes.length === 0 && (
+                <div className="bg-amber-950/30 border border-amber-800/60 rounded-xl p-3.5 space-y-2.5 animate-in fade-in">
+                  <div className="flex items-start gap-2.5 text-amber-300 font-semibold text-xs">
+                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <div>Nenhum cliente cadastrado no sistema</div>
+                      <p className="text-zinc-400 font-normal mt-0.5 text-xs leading-relaxed">
+                        O sistema acabou de ser instalado ou ainda não possui clientes cadastrados. Clique no botão abaixo para cadastrar o primeiro cliente e vincular a esta OS.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setModalNovoClienteOpen(true)}
+                    className="w-full py-2 px-3 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-bold rounded-lg transition flex items-center justify-center gap-2 text-xs shadow-md"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Cadastrar Primeiro Cliente Agora</span>
+                  </button>
+                </div>
+              )}
 
               {clienteSelecionado && (
                 <div className="bg-zinc-900/80 rounded-lg p-3 border border-zinc-800 text-xs space-y-1">
@@ -937,6 +1011,13 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
             </div>
           </div>
         )}
+
+        {/* Modal de Cadastro Rápido de Cliente */}
+        <ModalCadastroClienteRapido
+          isOpen={modalNovoClienteOpen}
+          onClose={() => setModalNovoClienteOpen(false)}
+          onClienteCadastrado={handleClienteCadastrado}
+        />
 
         {/* Modal de Cadastro Rápido de Veículo para o Cliente Selecionado */}
         {clienteSelecionado && (
