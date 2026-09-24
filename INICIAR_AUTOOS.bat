@@ -23,16 +23,14 @@ echo ===========================================================================
 echo                 AUTOOS - INICIANDO SISTEMA DA OFICINA
 echo ===============================================================================
 echo.
-echo Liberando porta 3000...
-for /f "tokens=5" %%p in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING 2^>nul') do (
-    taskkill /F /PID %%p >nul 2>nul
-)
+echo Liberando portas antigas...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ports = @(3000,3001,3002); foreach ($p in $ports) { try { Get-NetTCPConnection -LocalPort $p -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } } catch {} }" >nul 2>nul
+taskkill /F /IM node.exe >nul 2>nul
 
-echo Abrindo navegador...
+echo Iniciando servidor local com selecao automatica de portas...
+powershell -NoProfile -Command "Start-Process node -ArgumentList 'servidor.cjs' -WindowStyle Hidden"
 start "" cmd /c "timeout /t 2 /nobreak >nul && start http://127.0.0.1:3000"
 
-echo Iniciando servidor local em segundo plano oculto...
-powershell -NoProfile -Command "Start-Process node -ArgumentList 'servidor.cjs' -WindowStyle Hidden"
 echo [OK] Servidor ativo em segundo plano! Nenhuma janela precisa ficar aberta.
 timeout /t 2 >nul
 exit /b 0

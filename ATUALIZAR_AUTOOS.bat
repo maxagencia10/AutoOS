@@ -13,11 +13,19 @@ echo Este utilitario aplica as novas alteracoes e atualizacoes no seu computador
 echo Seus dados (clientes, veiculos, ordens de servico) estao 100%% seguros e intactos.
 echo.
 
-echo [1/4] Finalizando versoes antigas em execucao na porta 3000...
+echo [1/4] Finalizando versoes antigas em execucao (portas 3000 a 3005)...
+taskkill /F /IM node.exe >nul 2>nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ports = @(3000,3001,3002,3003,3004,3005); foreach ($p in $ports) { try { Get-NetTCPConnection -LocalPort $p -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } } catch {} }" >nul 2>nul
+
 for /f "tokens=5" %%p in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING 2^>nul') do (
     taskkill /F /PID %%p >nul 2>nul
 )
-taskkill /F /IM node.exe >nul 2>nul
+
+if exist "active_port.txt" del /f /q "active_port.txt" >nul 2>nul
+if exist "servidor.log" del /f /q "servidor.log" >nul 2>nul
+
+:: Pausa breve para a pilha de rede do Windows liberar os sockets
+timeout /t 1 /nobreak >nul
 echo [OK] Processos antigos encerrados com sucesso!
 echo.
 
@@ -54,8 +62,9 @@ echo  Novas funcoes ativas:
 echo  * Quilometragem (KM) e Placa visiveis nos Dados do Veiculo da OS
 echo  * Cadastro rapido de novo cliente diretamente na criacao da OS
 echo  * Campo Observacoes corrigido (sem textos automaticos)
+echo  * Servidor com protecao dinamica de portas para Windows 10 e Windows 11
 echo ===============================================================================
 echo.
-echo Fechando esta janela em 4 segundos...
-timeout /t 4 >nul
+echo Fechando esta janela em 3 segundos...
+timeout /t 3 >nul
 exit /b 0

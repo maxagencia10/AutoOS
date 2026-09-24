@@ -15,8 +15,13 @@ Write-Host "Caminho da instalacao: $((Get-Location).Path)" -ForegroundColor Gray
 Write-Host ""
 
 # 0. LIBERAR PORTA E FINALIZAR INSTANCIAS ANTERIORES
-Write-Host "[0/4] Verificando e liberando processos anteriores na porta 3000..." -ForegroundColor Gray
+Write-Host "[0/4] Verificando e liberando processos anteriores nas portas 3000 a 3005..." -ForegroundColor Gray
 try {
+    Get-Process -Name "node" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    $targetPorts = @(3000, 3001, 3002, 3003, 3004, 3005)
+    foreach ($tp in $targetPorts) {
+        Get-NetTCPConnection -LocalPort $tp -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+    }
     cmd /c "for /f ""tokens=5"" %p in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING 2^>nul') do taskkill /F /PID %p >nul 2^>nul"
 } catch {}
 
