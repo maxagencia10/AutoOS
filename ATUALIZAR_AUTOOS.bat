@@ -29,16 +29,18 @@ timeout /t 1 /nobreak >nul
 echo [OK] Processos antigos encerrados com sucesso!
 echo.
 
-echo [2/4] Verificando arquivos de producao atualizados...
-if not exist "dist\index.html" (
-    echo Compilando nova versao... Aguarde alguns instantes...
-    if exist "build.cjs" (
-        node build.cjs
-    ) else (
-        call npm run build
-    )
+echo [2/4] Compilando e aplicando os novos arquivos do AutoOS...
+echo Limpando arquivos anteriores para garantir atualizacao real...
+if exist "dist" rmdir /s /q "dist" >nul 2>nul
+if exist "build.cjs" (
+    node build.cjs
 ) else (
-    echo [OK] Arquivos da nova versao prontos!
+    call npm run build
+)
+if exist "dist\index.html" (
+    echo [OK] Nova versao compilada e pronta para uso!
+) else (
+    echo [AVISO] Falha ao compilar automaticamente. Verifique se o Node.js esta ativo.
 )
 echo.
 
@@ -59,9 +61,12 @@ echo ===========================================================================
 echo                SISTEMA ATUALIZADO E INICIADO COM SUCESSO!
 echo ===============================================================================
 echo  Novas funcoes ativas:
+echo  * Envio de OS via WhatsApp com resumo e documento oficial
+echo  * Pasta exclusiva automatica: PDFs_Ordens_de_Servico
+echo  * Botao "Copiar Imagem (Ctrl+V)" para anexar instantaneo no WhatsApp Web
+echo  * Botao "Abrir Pasta no Windows" direto para os PDFs das OS
 echo  * Quilometragem (KM) e Placa visiveis nos Dados do Veiculo da OS
-echo  * Cadastro rapido de novo cliente diretamente na criacao da OS
-echo  * Campo Observacoes corrigido (sem textos automaticos)
+echo  * Cadastro rapido de novo cliente na criacao da OS
 echo  * Servidor com protecao dinamica de portas para Windows 10 e Windows 11
 echo ===============================================================================
 echo.
