@@ -114,6 +114,7 @@ function MainApp() {
             onVisualizarOS={abrirVisualizarOS}
             onAbrirTour={abrirTour}
             onConfiguracoes={() => setCurrentTab('configuracoes')}
+            onIrParaAtualizacoes={() => setCurrentTab('atualizacoes')}
           />
         )}
 

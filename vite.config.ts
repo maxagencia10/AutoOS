@@ -7,9 +7,13 @@ import { defineConfig } from 'vite';
 
 function autoosPdfServerPlugin() {
   const pdfDir = path.resolve(__dirname, 'PDFs_Ordens_de_Servico');
+  const atualizacoesDir = path.resolve(__dirname, 'atualizacoes');
   try {
     if (!fs.existsSync(pdfDir)) {
       fs.mkdirSync(pdfDir, { recursive: true });
+    }
+    if (!fs.existsSync(atualizacoesDir)) {
+      fs.mkdirSync(atualizacoesDir, { recursive: true });
     }
   } catch (e) {}
 
@@ -69,6 +73,65 @@ function autoosPdfServerPlugin() {
         if (url === '/api/pasta-pdf-info') {
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({ ok: true, folder: pdfDir, folderName: 'PDFs_Ordens_de_Servico', exists: fs.existsSync(pdfDir) }));
+          return;
+        }
+
+        if (url === '/api/abrir-pasta-atualizacoes') {
+          try {
+            if (!fs.existsSync(atualizacoesDir)) fs.mkdirSync(atualizacoesDir, { recursive: true });
+            if (process.platform === 'win32') {
+              exec(`explorer.exe "${atualizacoesDir}"`);
+            } else if (process.platform === 'darwin') {
+              exec(`open "${atualizacoesDir}"`);
+            } else {
+              exec(`xdg-open "${atualizacoesDir}"`);
+            }
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ ok: true, folder: atualizacoesDir }));
+          } catch (err: any) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ ok: false, error: err.message }));
+          }
+          return;
+        }
+
+        if (url === '/api/verificar-atualizacoes-locais') {
+          try {
+            if (!fs.existsSync(atualizacoesDir)) fs.mkdirSync(atualizacoesDir, { recursive: true });
+            const files = fs.readdirSync(atualizacoesDir);
+            const pacotes: any[] = [];
+            for (const item of files) {
+              const itemPath = path.join(atualizacoesDir, item);
+              const stat = fs.statSync(itemPath);
+              if (stat.isFile() && item.endsWith('.json')) {
+                try {
+                  const data = JSON.parse(fs.readFileSync(itemPath, 'utf8'));
+                  if (data.versao) {
+                    pacotes.push({ tipo: 'JSON_MANIFEST', arquivo: item, caminho: itemPath, tamanho: stat.size, modificadoEm: stat.mtime, manifest: data });
+                  }
+                } catch (e) {}
+              } else if (stat.isFile() && item.endsWith('.zip')) {
+                pacotes.push({ tipo: 'ZIP_PACKAGE', arquivo: item, caminho: itemPath, tamanho: stat.size, modificadoEm: stat.mtime });
+              }
+            }
+
+            let versaoSistema = '1.2.0';
+            const versionFile = path.resolve(__dirname, 'version.json');
+            if (fs.existsSync(versionFile)) {
+              try {
+                const s = JSON.parse(fs.readFileSync(versionFile, 'utf8'));
+                if (s.versao) versaoSistema = s.versao;
+              } catch (e) {}
+            }
+
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ ok: true, pasta: atualizacoesDir, versaoAtual: versaoSistema, totalPacotes: pacotes.length, pacotes }));
+          } catch (err: any) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ ok: false, error: err.message }));
+          }
           return;
         }
 

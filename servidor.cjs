@@ -11,15 +11,20 @@ const DIST_DIR = path.join(__dirname, 'dist');
 const PORT_FILE = path.join(__dirname, 'active_port.txt');
 const LOG_FILE = path.join(__dirname, 'servidor.log');
 const PDFS_DIR = path.join(__dirname, 'PDFs_Ordens_de_Servico');
+const ATUALIZACOES_DIR = path.join(__dirname, 'atualizacoes');
 
-// Assegura que a pasta exclusiva para os PDFs das Ordens de Serviço exista
+// Assegura que as pastas exclusivas existam
 try {
   if (!fs.existsSync(PDFS_DIR)) {
     fs.mkdirSync(PDFS_DIR, { recursive: true });
     console.log('[AutoOS] Pasta exclusiva criada para os PDFs das OS:', PDFS_DIR);
   }
+  if (!fs.existsSync(ATUALIZACOES_DIR)) {
+    fs.mkdirSync(ATUALIZACOES_DIR, { recursive: true });
+    console.log('[AutoOS] Pasta exclusiva criada para atualizacoes:', ATUALIZACOES_DIR);
+  }
 } catch (e) {
-  console.warn('[AutoOS] Aviso ao inicializar pasta de PDFs:', e.message);
+  console.warn('[AutoOS] Aviso ao inicializar pastas do sistema:', e.message);
 }
 
 const DEFAULT_PORT = parseInt(process.env.PORT, 10) || 3000;
@@ -199,6 +204,138 @@ function handleRequest(req, res) {
       exists: fs.existsSync(PDFS_DIR),
       folderName: 'PDFs_Ordens_de_Servico'
     }));
+    return;
+  }
+
+  // Endpoint para abrir a pasta de Atualizações no Windows Explorer
+  if (reqUrl === '/api/abrir-pasta-atualizacoes') {
+    try {
+      if (!fs.existsSync(ATUALIZACOES_DIR)) {
+        fs.mkdirSync(ATUALIZACOES_DIR, { recursive: true });
+      }
+
+      if (process.platform === 'win32') {
+        exec(`explorer.exe "${ATUALIZACOES_DIR}"`);
+      } else if (process.platform === 'darwin') {
+        exec(`open "${ATUALIZACOES_DIR}"`);
+      } else {
+        exec(`xdg-open "${ATUALIZACOES_DIR}"`);
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: true, folder: ATUALIZACOES_DIR, message: 'Pasta aberta no explorador' }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+    }
+    return;
+  }
+
+  // Endpoint para escanear a pasta 'atualizacoes' procurando pacotes (.json, .zip ou pastas)
+  if (reqUrl === '/api/verificar-atualizacoes-locais') {
+    try {
+      if (!fs.existsSync(ATUALIZACOES_DIR)) {
+        fs.mkdirSync(ATUALIZACOES_DIR, { recursive: true });
+      }
+
+      const files = fs.readdirSync(ATUALIZACOES_DIR);
+      const pacotes = [];
+
+      for (const item of files) {
+        const itemPath = path.join(ATUALIZACOES_DIR, item);
+        const stat = fs.statSync(itemPath);
+
+        // Se for um arquivo .json de manifesto
+        if (stat.isFile() && item.endsWith('.json')) {
+          try {
+            const raw = fs.readFileSync(itemPath, 'utf8');
+            const data = JSON.parse(raw);
+            if (data.versao) {
+              pacotes.push({
+                tipo: 'JSON_MANIFEST',
+                arquivo: item,
+                caminho: itemPath,
+                tamanho: stat.size,
+                modificadoEm: stat.mtime,
+                manifest: data
+              });
+            }
+          } catch (e) {}
+        }
+        // Se for um arquivo .zip
+        else if (stat.isFile() && item.endsWith('.zip')) {
+          pacotes.push({
+            tipo: 'ZIP_PACKAGE',
+            arquivo: item,
+            caminho: itemPath,
+            tamanho: stat.size,
+            modificadoEm: stat.mtime
+          });
+        }
+        // Se for uma pasta contendo version.json ou dist
+        else if (stat.isDirectory()) {
+          const innerManifest = path.join(itemPath, 'version.json');
+          if (fs.existsSync(innerManifest)) {
+            try {
+              const raw = fs.readFileSync(innerManifest, 'utf8');
+              const data = JSON.parse(raw);
+              pacotes.push({
+                tipo: 'PASTA_EXPANDIDA',
+                arquivo: item,
+                caminho: itemPath,
+                tamanho: 0,
+                modificadoEm: stat.mtime,
+                manifest: data
+              });
+            } catch (e) {}
+          }
+        }
+      }
+
+      // Lê a versão atual do version.json do sistema
+      let versaoSistema = '1.0.0';
+      const versionFile = path.join(__dirname, 'version.json');
+      if (fs.existsSync(versionFile)) {
+        try {
+          const sysData = JSON.parse(fs.readFileSync(versionFile, 'utf8'));
+          if (sysData.versao) versaoSistema = sysData.versao;
+        } catch (e) {}
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        ok: true,
+        pasta: ATUALIZACOES_DIR,
+        versaoAtual: versaoSistema,
+        totalPacotes: pacotes.length,
+        pacotes
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+    }
+    return;
+  }
+
+  // Endpoint para acionar o recompilador/atualizador nativo em background
+  if (reqUrl === '/api/executar-atualizacao-sistema' && req.method === 'POST') {
+    try {
+      const batAtualizador = path.join(__dirname, 'ATUALIZAR_AUTOOS.bat');
+      if (process.platform === 'win32') {
+        exec(`cmd.exe /c start "" "${batAtualizador}"`);
+      } else {
+        exec('node build.cjs');
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        ok: true,
+        message: 'Processo de atualizacao do sistema acionado com sucesso'
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+    }
     return;
   }
 

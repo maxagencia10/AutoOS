@@ -1,0 +1,19 @@
+{
+  "versao": "1.2.0",
+  "nome_versao": "AutoOS - Atualização Dinâmica & WhatsApp Pro",
+  "data_lancamento": "2026-09-28",
+  "novos_recursos": [
+    "Envio de Ordem de Serviço via WhatsApp com resumo e arquivo PDF oficial",
+    "Pasta exclusiva no computador para PDFs: PDFs_Ordens_de_Servico",
+    "Botão 'Copiar Imagem (Ctrl+V)' para anexar instantâneo no WhatsApp Web",
+    "Botão 'Abrir Pasta no Windows' direto para os PDFs das OS",
+    "Central de Atualizações Tríplice: Pasta 'atualizacoes', Upload Direto .ZIP e Nuvem",
+    "Verificador inteligente de atualizações pendentes com aviso em tempo real",
+    "Backup automático e preventivo antes de qualquer atualização"
+  ],
+  "melhorias": [
+    "Servidor local com detecção automática de portas livres (3000 a 3005)",
+    "Script ATUALIZAR_AUTOOS.bat com limpeza de cache para garantir aplicação imediata",
+    "Nenhum prompt de comando necessário para atualização"
+  ]
+}

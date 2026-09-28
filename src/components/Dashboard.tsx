@@ -24,6 +24,8 @@ import { OrdemServico } from '../types';
 import { OrdemServicoRepository } from '../services/dbRepository';
 import { formatCurrency, formatDate, getStatusBadgeInfo, formatPlaca } from '../utils/formatters';
 import { ModalEnvioWhatsAppOS } from './ModalEnvioWhatsAppOS';
+import { verificarPacotesPastaAtualizacoes } from '../services/atualizacaoScanner';
+import { ArrowUpCircle } from 'lucide-react';
 
 interface DashboardProps {
   onNovaOS: () => void;
@@ -33,6 +35,7 @@ interface DashboardProps {
   onVisualizarOS: (os: OrdemServico) => void;
   onAbrirTour?: (etapaInicial?: number) => void;
   onConfiguracoes?: () => void;
+  onIrParaAtualizacoes?: () => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -43,6 +46,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onVisualizarOS,
   onAbrirTour,
   onConfiguracoes,
+  onIrParaAtualizacoes,
 }) => {
   const [metrics, setMetrics] = useState({
     total: 0,
@@ -62,9 +66,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [recentes, setRecentes] = useState<OrdemServico[]>([]);
   const [loading, setLoading] = useState(true);
   const [osParaWhatsApp, setOsParaWhatsApp] = useState<OrdemServico | null>(null);
+  const [pacotesPendentes, setPacotesPendentes] = useState<number>(0);
 
   useEffect(() => {
     carregarDados();
+    verificarPacotesPastaAtualizacoes().then((info) => {
+      if (info && info.totalPacotes) {
+        setPacotesPendentes(info.totalPacotes);
+      }
+    }).catch(() => {});
   }, []);
 
   const carregarDados = async () => {
@@ -96,6 +106,39 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-6">
+
+      {/* Banner de Atualização Detectada na Pasta ou Nuvem */}
+      {pacotesPendentes > 0 && onIrParaAtualizacoes && (
+        <div className="bg-gradient-to-r from-emerald-950 via-zinc-900 to-zinc-950 border-2 border-emerald-500/60 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl shadow-emerald-950/40 animate-pulse">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+              <ArrowUpCircle className="w-6 h-6 text-emerald-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-bold text-white">
+                  Nova Atualização do AutoOS Detectada!
+                </h3>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700 text-[10px] font-mono font-bold">
+                  {pacotesPendentes} pacote(s) na pasta
+                </span>
+              </div>
+              <p className="text-xs text-zinc-300 mt-0.5">
+                Um novo pacote de melhorias foi colocado na pasta de atualizações. Clique para instalar em 1 clique sem perder dados.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onIrParaAtualizacoes}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-emerald-950 transition border border-emerald-500 shrink-0 cursor-pointer"
+          >
+            <span>Ver e Instalar Atualização</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       
       {/* Barra de Ações Rápidas do Dashboard */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 sm:p-5 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

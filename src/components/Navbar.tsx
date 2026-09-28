@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Wrench,
   FileText,
@@ -14,11 +14,13 @@ import {
   HelpCircle,
   Sun,
   Moon,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { BuscaGlobalNavbar } from './BuscaGlobalNavbar';
 import { Cliente, Veiculo } from '../types';
+import { verificarPacotesPastaAtualizacoes } from '../services/atualizacaoScanner';
 
 interface NavbarProps {
   currentTab: string;
@@ -39,6 +41,26 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const { usuarioAtual, usuariosDisponiveis, trocarUsuario, isAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const [totalPacotesDisponiveis, setTotalPacotesDisponiveis] = useState<number>(0);
+
+  useEffect(() => {
+    let ativo = true;
+    const checar = async () => {
+      try {
+        const info = await verificarPacotesPastaAtualizacoes();
+        if (ativo && info && info.totalPacotes) {
+          setTotalPacotesDisponiveis(info.totalPacotes);
+        }
+      } catch {}
+    };
+
+    checar();
+    const interval = setInterval(checar, 15000);
+    return () => {
+      ativo = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const navItems = [
     { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
@@ -48,7 +70,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'configuracoes', label: 'Oficina (Ajustes)', icon: Settings },
     { id: 'usuarios', label: 'Usuários', icon: ShieldCheck, adminOnly: true },
     { id: 'backup', label: 'Backup & Banco', icon: HardDrive },
-    { id: 'atualizacoes', label: 'Atualizações', icon: ArrowUpCircle, adminOnly: true },
+    { id: 'atualizacoes', label: 'Atualizações', icon: ArrowUpCircle, adminOnly: true, badge: totalPacotesDisponiveis },
   ];
 
   return (
@@ -82,7 +104,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   key={item.id}
                   id={`nav-tab-${item.id}`}
                   onClick={() => onSelectTab(item.id)}
-                  className={`flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 lg:py-2 rounded-lg text-xs lg:text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
+                  className={`relative flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 lg:py-2 rounded-lg text-xs lg:text-sm font-medium transition-all whitespace-nowrap shrink-0 ${
                     active
                       ? 'bg-red-600/15 text-red-400 border border-red-500/30 shadow-sm'
                       : 'text-zinc-300 hover:text-white hover:bg-zinc-900 border border-transparent'
@@ -90,6 +112,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 >
                   <Icon className={`w-3.5 h-3.5 lg:w-4 lg:h-4 shrink-0 ${active ? 'text-red-400' : 'text-zinc-400'}`} />
                   <span>{item.label}</span>
+                  {item.badge && item.badge > 0 ? (
+                    <span className="ml-1 px-1.5 py-0.2 bg-emerald-500 text-zinc-950 font-bold text-[10px] rounded-full animate-pulse shadow-sm">
+                      {item.badge}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
