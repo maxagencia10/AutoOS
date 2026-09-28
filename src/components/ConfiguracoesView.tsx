@@ -21,6 +21,9 @@ import {
   Search,
   Loader2,
   ArrowLeft,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react';
 import { OficinaConfig } from '../types';
 import { OficinaRepository } from '../services/dbRepository';
@@ -30,6 +33,7 @@ import { BannerCabecalhoOficial } from './BannerCabecalhoOficial';
 import { BarraTituloOS } from './BarraTituloOS';
 import { removeImageBackground } from '../utils/imageBackgroundRemover';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 interface ConfiguracoesViewProps {
   onIrParaAtualizacoes?: () => void;
@@ -38,6 +42,7 @@ interface ConfiguracoesViewProps {
 
 export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAtualizacoes, onVoltar }) => {
   const { zerarParaNovaInstalacao } = useAuth();
+  const { themeMode, theme, setThemeMode } = useTheme();
   const [formData, setFormData] = useState<OficinaConfig>({
     id: 'oficina_config_1',
     nome: '',
@@ -370,6 +375,109 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAt
 
       <form onSubmit={handleSalvar} className="space-y-6 text-xs sm:text-sm">
         
+        {/* Aparência do Sistema: Fundo Claro ou Fundo Escuro */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+            <div className="flex items-center gap-2 text-white font-bold text-sm">
+              <Sun className="w-5 h-5 text-amber-500" />
+              <span>Aparência do Sistema: Fundo Claro ou Fundo Escuro</span>
+            </div>
+            <span className="text-xs px-2.5 py-1 bg-zinc-800 text-zinc-300 border border-zinc-700 rounded-md font-semibold">
+              Tema Atual: {theme === 'dark' ? 'Modo Escuro (Dark)' : 'Modo Claro (Light)'}
+            </span>
+          </div>
+
+          <p className="text-zinc-400 text-xs leading-relaxed">
+            Escolha o fundo visual de sua preferência. A mudança é instantânea e fica salva neste navegador/computador. Você também pode alternar rapidamente pelo botão <strong className="text-white">Fundo Claro / Escuro</strong> no topo da tela.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            {/* Opção 1: Fundo Escuro */}
+            <div
+              id="theme-option-dark"
+              onClick={() => setThemeMode('dark')}
+              className={`p-4 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${
+                themeMode === 'dark'
+                  ? 'border-red-500 bg-zinc-950 shadow-md shadow-red-950/40'
+                  : 'border-zinc-800 bg-zinc-950/50 hover:border-zinc-700'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-700 flex items-center justify-center text-zinc-200">
+                    <Moon className="w-4 h-4 text-indigo-400" />
+                  </div>
+                  {themeMode === 'dark' && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-red-400 bg-red-950/60 border border-red-800/40 px-2 py-0.5 rounded-full">
+                      Ativo
+                    </span>
+                  )}
+                </div>
+                <h3 className="font-bold text-white text-sm">Fundo Escuro (Padrão)</h3>
+                <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                  Visual escuro esportivo automotivo. Descansa a visão durante longos períodos na recepção e bancada da oficina.
+                </p>
+              </div>
+            </div>
+
+            {/* Opção 2: Fundo Claro */}
+            <div
+              id="theme-option-light"
+              onClick={() => setThemeMode('light')}
+              className={`p-4 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${
+                themeMode === 'light'
+                  ? 'border-red-500 bg-zinc-950 shadow-md shadow-amber-950/40'
+                  : 'border-zinc-800 bg-zinc-950/50 hover:border-zinc-700'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-700 flex items-center justify-center text-zinc-200">
+                    <Sun className="w-4 h-4 text-amber-500" />
+                  </div>
+                  {themeMode === 'light' && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-950/60 border border-amber-800/40 px-2 py-0.5 rounded-full">
+                      Ativo
+                    </span>
+                  )}
+                </div>
+                <h3 className="font-bold text-white text-sm">Fundo Claro</h3>
+                <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                  Fundo claro com alto contraste e nitidez. Excelente para salas bem iluminadas, impressão e uso em escritório.
+                </p>
+              </div>
+            </div>
+
+            {/* Opção 3: Automático (Sistema) */}
+            <div
+              id="theme-option-system"
+              onClick={() => setThemeMode('system')}
+              className={`p-4 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${
+                themeMode === 'system'
+                  ? 'border-red-500 bg-zinc-950 shadow-md shadow-blue-950/40'
+                  : 'border-zinc-800 bg-zinc-950/50 hover:border-zinc-700'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-700 flex items-center justify-center text-zinc-200">
+                    <Monitor className="w-4 h-4 text-blue-400" />
+                  </div>
+                  {themeMode === 'system' && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400 bg-blue-950/60 border border-blue-800/40 px-2 py-0.5 rounded-full">
+                      Ativo
+                    </span>
+                  )}
+                </div>
+                <h3 className="font-bold text-white text-sm">Automático (Sistema)</h3>
+                <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                  Acompanha automaticamente as configurações de tema claro ou escuro do Windows ou do seu navegador.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Identidade Visual & Cabeçalho da Ordem de Serviço (Section Especial Impérios Car) */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">

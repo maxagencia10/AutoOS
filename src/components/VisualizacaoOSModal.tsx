@@ -15,6 +15,8 @@ import {
   FileCheck,
   Building2,
   Calendar,
+  MessageSquare,
+  Download,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { OrdemServico, OficinaConfig, StatusOS, HistoricoStatus } from '../types';
@@ -23,6 +25,7 @@ import {
   OrdemServicoRepository,
 } from '../services/dbRepository';
 import { DocumentoOSImpressao } from './DocumentoOSImpressao';
+import { ModalEnvioWhatsAppOS } from './ModalEnvioWhatsAppOS';
 import {
   formatDate,
   formatDateTime,
@@ -54,6 +57,9 @@ export const VisualizacaoOSModal: React.FC<VisualizacaoOSModalProps> = ({
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [erroCancelamento, setErroCancelamento] = useState('');
   const [cancelando, setCancelando] = useState(false);
+
+  // Modal de Envio WhatsApp com PDF
+  const [modalWhatsAppAberto, setModalWhatsAppAberto] = useState(false);
 
   // Alteração de Status
   const [alterandoStatus, setAlterandoStatus] = useState(false);
@@ -280,12 +286,13 @@ export const VisualizacaoOSModal: React.FC<VisualizacaoOSModalProps> = ({
             </button>
 
             <button
-              onClick={handleWhatsApp}
+              onClick={() => setModalWhatsAppAberto(true)}
               id="btn-whatsapp-os"
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-md transition"
+              title="Enviar Ordem de Serviço via WhatsApp com anexo do PDF oficial"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-md shadow-emerald-950 transition border border-emerald-500 cursor-pointer"
             >
-              <Share2 className="w-4 h-4" />
-              <span>WhatsApp</span>
+              <MessageSquare className="w-4 h-4" />
+              <span>Enviar WhatsApp (com PDF)</span>
             </button>
 
             {os.status !== 'CANCELADA' && (
@@ -420,6 +427,15 @@ export const VisualizacaoOSModal: React.FC<VisualizacaoOSModalProps> = ({
               </form>
             </div>
           </div>
+        )}
+
+        {/* Modal de Envio via WhatsApp com PDF */}
+        {modalWhatsAppAberto && (
+          <ModalEnvioWhatsAppOS
+            os={os}
+            oficina={oficina}
+            onClose={() => setModalWhatsAppAberto(false)}
+          />
         )}
 
       </div>

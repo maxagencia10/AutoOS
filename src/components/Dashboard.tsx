@@ -18,10 +18,12 @@ import {
   HelpCircle,
   MousePointer,
   Settings,
+  MessageSquare,
 } from 'lucide-react';
 import { OrdemServico } from '../types';
 import { OrdemServicoRepository } from '../services/dbRepository';
 import { formatCurrency, formatDate, getStatusBadgeInfo, formatPlaca } from '../utils/formatters';
+import { ModalEnvioWhatsAppOS } from './ModalEnvioWhatsAppOS';
 
 interface DashboardProps {
   onNovaOS: () => void;
@@ -56,8 +58,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
     totalClientes: 0,
     totalVeiculos: 0,
   });
+  const [todasOS, setTodasOS] = useState<OrdemServico[]>([]);
   const [recentes, setRecentes] = useState<OrdemServico[]>([]);
   const [loading, setLoading] = useState(true);
+  const [osParaWhatsApp, setOsParaWhatsApp] = useState<OrdemServico | null>(null);
 
   useEffect(() => {
     carregarDados();
@@ -71,6 +75,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         OrdemServicoRepository.getAll(),
       ]);
       setMetrics(m);
+      setTodasOS(osList);
       setRecentes(osList.slice(0, 5));
     } catch (err) {
       console.error('Erro ao carregar métricas:', err);
@@ -403,13 +408,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         {formatCurrency(os.total)}
                       </td>
                       <td className="px-4 py-3.5 text-center">
-                        <button
-                          onClick={() => onVisualizarOS(os)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition border border-zinc-700"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-zinc-400" />
-                          <span>Ver</span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => onVisualizarOS(os)}
+                            title="Visualizar OS e Imprimir A4"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition border border-zinc-700"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-zinc-400" />
+                            <span>Ver</span>
+                          </button>
+
+                          <button
+                            onClick={() => setOsParaWhatsApp(os)}
+                            title="Enviar Ordem de Serviço com PDF via WhatsApp"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 hover:text-emerald-300 text-xs font-medium transition border border-emerald-500/40"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">WhatsApp</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -419,6 +436,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         )}
       </div>
+
+      {/* Modal de Envio via WhatsApp com PDF */}
+      {osParaWhatsApp && (
+        <ModalEnvioWhatsAppOS
+          os={osParaWhatsApp}
+          onClose={() => setOsParaWhatsApp(null)}
+        />
+      )}
 
     </div>
   );

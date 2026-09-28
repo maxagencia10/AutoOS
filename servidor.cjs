@@ -10,6 +10,17 @@ const { exec } = require('child_process');
 const DIST_DIR = path.join(__dirname, 'dist');
 const PORT_FILE = path.join(__dirname, 'active_port.txt');
 const LOG_FILE = path.join(__dirname, 'servidor.log');
+const PDFS_DIR = path.join(__dirname, 'PDFs_Ordens_de_Servico');
+
+// Assegura que a pasta exclusiva para os PDFs das Ordens de Serviço exista
+try {
+  if (!fs.existsSync(PDFS_DIR)) {
+    fs.mkdirSync(PDFS_DIR, { recursive: true });
+    console.log('[AutoOS] Pasta exclusiva criada para os PDFs das OS:', PDFS_DIR);
+  }
+} catch (e) {
+  console.warn('[AutoOS] Aviso ao inicializar pasta de PDFs:', e.message);
+}
 
 const DEFAULT_PORT = parseInt(process.env.PORT, 10) || 3000;
 const PORTS_TO_TRY = [DEFAULT_PORT, 3001, 3002, 3003, 3004, 3005];
@@ -110,6 +121,105 @@ function handleRequest(req, res) {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({ ok: true, port: currentPort }));
     return;
+  }
+
+  // Endpoint para salvar PDF diretamente na pasta exclusiva do sistema
+  if (reqUrl === '/api/salvar-pdf' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const { filename, base64 } = payload;
+        if (!filename || !base64) {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ ok: false, error: 'Filename ou base64 ausente' }));
+          return;
+        }
+
+        if (!fs.existsSync(PDFS_DIR)) {
+          fs.mkdirSync(PDFS_DIR, { recursive: true });
+        }
+
+        const safeFilename = path.basename(filename).replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+        const targetFile = path.join(PDFS_DIR, safeFilename);
+        const buffer = Buffer.from(base64, 'base64');
+        fs.writeFileSync(targetFile, buffer);
+
+        console.log(`[AutoOS] PDF da OS gravado na pasta exclusiva: ${targetFile} (${buffer.length} bytes)`);
+
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+          ok: true,
+          filename: safeFilename,
+          folder: PDFS_DIR,
+          fullPath: targetFile,
+          size: buffer.length,
+          folderName: 'PDFs_Ordens_de_Servico'
+        }));
+      } catch (err) {
+        console.error('[AutoOS] Erro ao salvar PDF:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // Endpoint para abrir a pasta de PDFs diretamente no explorador do Windows
+  if (reqUrl === '/api/abrir-pasta-pdf') {
+    try {
+      if (!fs.existsSync(PDFS_DIR)) {
+        fs.mkdirSync(PDFS_DIR, { recursive: true });
+      }
+
+      if (process.platform === 'win32') {
+        exec(`explorer.exe "${PDFS_DIR}"`);
+      } else if (process.platform === 'darwin') {
+        exec(`open "${PDFS_DIR}"`);
+      } else {
+        exec(`xdg-open "${PDFS_DIR}"`);
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: true, folder: PDFS_DIR, message: 'Pasta aberta no explorador de arquivos' }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+    }
+    return;
+  }
+
+  // Endpoint para informações da pasta de PDFs
+  if (reqUrl === '/api/pasta-pdf-info') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({
+      ok: true,
+      folder: PDFS_DIR,
+      exists: fs.existsSync(PDFS_DIR),
+      folderName: 'PDFs_Ordens_de_Servico'
+    }));
+    return;
+  }
+
+  // Servir arquivos de PDFs gerados diretamente
+  if (reqUrl.startsWith('/api/pdf/')) {
+    const rawName = decodeURIComponent(reqUrl.replace('/api/pdf/', ''));
+    const safeName = path.basename(rawName);
+    const pdfPath = path.join(PDFS_DIR, safeName);
+    if (fs.existsSync(pdfPath) && fs.statSync(pdfPath).isFile()) {
+      res.writeHead(200, {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${safeName}"`,
+        'Cache-Control': 'no-cache'
+      });
+      fs.createReadStream(pdfPath).pipe(res);
+      return;
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'PDF não encontrado' }));
+      return;
+    }
   }
 
   let safePath = path.normalize(decodeURIComponent(reqUrl)).replace(/^(\.\.[\/\\])+/, '');

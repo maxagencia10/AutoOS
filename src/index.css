@@ -3,6 +3,7 @@
 @layer base {
   body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
   
   /* Print layout strictly optimized for A4 document */
@@ -67,4 +68,234 @@
       display: none !important;
     }
   }
+}
+
+/* ==========================================================================
+   TEMA CLARO (LIGHT MODE) - AUTOOS PROFISSIONAL
+   Harmonização visual completa, alto contraste e legibilidade impecável.
+   ========================================================================== */
+html.light,
+body.light {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+html.light ::selection {
+  background-color: #dc2626 !important;
+  color: #ffffff !important;
+}
+
+/* Telas e Containers Principais */
+html.light .min-h-screen.bg-zinc-950,
+html.light div.bg-zinc-950 {
+  background-color: #f1f5f9 !important;
+}
+
+/* Header & Barra de Navegação */
+html.light header.bg-zinc-950,
+html.light header {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.06) !important;
+}
+
+html.light header .font-mono.text-white {
+  color: #0f172a !important;
+}
+
+html.light header button.text-zinc-300:not(.bg-red-600) {
+  color: #475569 !important;
+}
+
+html.light header button.text-zinc-300:hover:not(.bg-red-600) {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+html.light header button.bg-red-600\/15,
+html.light header button.bg-red-600\/20 {
+  background-color: #fee2e2 !important;
+  color: #b91c1c !important;
+  border-color: #fca5a5 !important;
+}
+
+/* Cards, Seções e Painéis */
+html.light .bg-zinc-900 {
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.05);
+}
+
+html.light .bg-zinc-950\/60,
+html.light .bg-zinc-950\/80,
+html.light .bg-zinc-950\/90 {
+  background-color: #f8fafc !important;
+}
+
+html.light .bg-zinc-800 {
+  background-color: #f1f5f9 !important;
+}
+
+/* Bordas e Divisores */
+html.light .border-zinc-800,
+html.light .border-zinc-800\/80,
+html.light .border-zinc-800\/50,
+html.light .border-zinc-900,
+html.light .divide-zinc-800 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e2e8f0 !important;
+}
+
+html.light .border-zinc-700 {
+  border-color: #cbd5e1 !important;
+}
+
+/* Botões Secundários */
+html.light button.bg-zinc-800,
+html.light a.bg-zinc-800 {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light button.bg-zinc-800:hover,
+html.light a.bg-zinc-800:hover {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Inputs, Selects e Textareas */
+html.light input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]),
+html.light select,
+html.light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light input:focus,
+html.light select:focus,
+html.light textarea:focus {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15) !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.light input:disabled,
+html.light select:disabled,
+html.light textarea:disabled {
+  background-color: #f8fafc !important;
+  color: #64748b !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* Tabelas */
+html.light thead.bg-zinc-950,
+html.light thead {
+  background-color: #f8fafc !important;
+  color: #475569 !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light tbody tr:hover {
+  background-color: #f8fafc !important;
+}
+
+/* Hierarquia de Textos */
+html.light .text-zinc-100 {
+  color: #0f172a !important;
+}
+
+html.light .text-zinc-200 {
+  color: #1e293b !important;
+}
+
+html.light .text-zinc-300 {
+  color: #334155 !important;
+}
+
+html.light .text-zinc-400 {
+  color: #475569 !important;
+}
+
+html.light .text-zinc-500 {
+  color: #64748b !important;
+}
+
+/* Títulos text-white transformados para dark em fundo claro (exceto botões coloridos) */
+html.light h1.text-white,
+html.light h2.text-white,
+html.light h3.text-white,
+html.light h4.text-white,
+html.light h5.text-white,
+html.light div.text-white:not(.bg-red-600):not(.bg-emerald-600):not(.bg-blue-600):not(button *),
+html.light span.text-white:not(.bg-red-600):not(.bg-emerald-600):not(.bg-blue-600):not(button *):not(.badge-solid *),
+html.light strong.text-white:not(button *) {
+  color: #0f172a !important;
+}
+
+/* Assegura que botões primários coloridos mantenham texto branco brilhante */
+html.light .bg-red-600,
+html.light .bg-red-600 *,
+html.light .bg-red-700,
+html.light .bg-red-700 *,
+html.light .bg-emerald-600,
+html.light .bg-emerald-600 *,
+html.light .bg-blue-600,
+html.light .bg-blue-600 *,
+html.light .bg-amber-600,
+html.light .bg-amber-600 *,
+html.light button.bg-red-600,
+html.light button.bg-red-600 * {
+  color: #ffffff !important;
+}
+
+/* Modais e Caixas de Diálogo */
+html.light .fixed.bg-black\/85,
+html.light .fixed.bg-black\/70 {
+  background-color: rgba(15, 23, 42, 0.65) !important;
+}
+
+html.light .fixed .bg-zinc-900 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25) !important;
+}
+
+/* Gradientes e Destaques */
+html.light .bg-gradient-to-br.from-zinc-900 {
+  background-image: linear-gradient(to bottom right, #ffffff, #f8fafc, #f1f5f9) !important;
+  border-color: #fca5a5 !important;
+}
+
+/* Dicas e Caixas de Atenção no Tema Claro */
+html.light .bg-emerald-950\/30 {
+  background-color: #f0fdf4 !important;
+  border-color: #bbf7d0 !important;
+}
+
+html.light .bg-amber-950\/30 {
+  background-color: #fffbeb !important;
+  border-color: #fde68a !important;
+}
+
+html.light .bg-red-950\/30,
+html.light .bg-red-950\/80 {
+  background-color: #fef2f2 !important;
+  border-color: #fecaca !important;
+  color: #991b1b !important;
+}
+
+/* Rodapé */
+html.light footer {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #64748b !important;
 }

@@ -15,6 +15,8 @@ import {
   XCircle,
   AlertCircle,
   ArrowLeft,
+  MessageSquare,
+  FolderOpen,
 } from 'lucide-react';
 import { OrdemServico, StatusOS } from '../types';
 import { OrdemServicoRepository } from '../services/dbRepository';
@@ -25,7 +27,9 @@ import {
   getStatusBadgeInfo,
   buildWhatsAppLink,
 } from '../utils/formatters';
+import { openPDFFolderInExplorer } from '../utils/pdfGenerator';
 import { useAuth } from '../context/AuthContext';
+import { ModalEnvioWhatsAppOS } from './ModalEnvioWhatsAppOS';
 
 interface OrdensServicoViewProps {
   onNovaOS: () => void;
@@ -45,6 +49,7 @@ export const OrdensServicoView: React.FC<OrdensServicoViewProps> = ({
   const [search, setSearch] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<string>('TODAS');
   const [loading, setLoading] = useState(true);
+  const [osParaWhatsApp, setOsParaWhatsApp] = useState<OrdemServico | null>(null);
 
   useEffect(() => {
     carregarOrdens();
@@ -128,6 +133,16 @@ export const OrdensServicoView: React.FC<OrdensServicoViewProps> = ({
               <span>Voltar ao Início</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => openPDFFolderInExplorer()}
+            title="Abrir pasta exclusiva onde ficam salvos os PDFs das Ordens de Serviço (PDFs_Ordens_de_Servico)"
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-amber-300 hover:text-amber-200 rounded-lg text-xs sm:text-sm font-semibold transition border border-zinc-700 shadow-sm shrink-0 cursor-pointer"
+          >
+            <FolderOpen className="w-4 h-4 text-amber-400" />
+            <span className="hidden sm:inline">Pasta dos PDFs</span>
+          </button>
 
           <button
             id="btn-nova-os-lista"
@@ -267,11 +282,11 @@ export const OrdensServicoView: React.FC<OrdensServicoViewProps> = ({
                           </button>
 
                           <button
-                            onClick={() => handleWhatsApp(os)}
-                            title="Enviar Notificação via WhatsApp"
-                            className="p-1.5 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-400 rounded-md transition border border-emerald-800/80"
+                            onClick={() => setOsParaWhatsApp(os)}
+                            title="Enviar Ordem de Serviço com PDF via WhatsApp"
+                            className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 hover:text-emerald-300 rounded-md transition border border-emerald-500/40"
                           >
-                            <Share2 className="w-3.5 h-3.5" />
+                            <MessageSquare className="w-3.5 h-3.5" />
                           </button>
 
                           {os.status !== 'CANCELADA' && (
@@ -303,6 +318,14 @@ export const OrdensServicoView: React.FC<OrdensServicoViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Modal de Envio via WhatsApp com PDF */}
+      {osParaWhatsApp && (
+        <ModalEnvioWhatsAppOS
+          os={osParaWhatsApp}
+          onClose={() => setOsParaWhatsApp(null)}
+        />
+      )}
 
     </div>
   );

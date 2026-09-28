@@ -12,8 +12,11 @@ import {
   HardDrive,
   ArrowUpCircle,
   HelpCircle,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { BuscaGlobalNavbar } from './BuscaGlobalNavbar';
 import { Cliente, Veiculo } from '../types';
 
@@ -35,6 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectVeiculo,
 }) => {
   const { usuarioAtual, usuariosDisponiveis, trocarUsuario, isAdmin } = useAuth();
+  const { theme, toggleTheme } = useTheme();
 
   const navItems = [
     { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
@@ -99,6 +103,28 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onSelectVeiculo={onSelectVeiculo}
               />
             )}
+
+            {/* Alternador de Fundo Claro / Escuro */}
+            <button
+              id="btn-navbar-tema"
+              type="button"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Alternar para Fundo Claro (Modo Dia)' : 'Alternar para Fundo Escuro (Modo Noite)'}
+              aria-label={theme === 'dark' ? 'Ativar Fundo Claro' : 'Ativar Fundo Escuro'}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border text-xs sm:text-sm font-semibold transition shrink-0 shadow-sm bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-700 hover:border-zinc-600 cursor-pointer"
+            >
+              {theme === 'dark' ? (
+                <>
+                  <Sun className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="hidden sm:inline">Fundo Claro</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <span className="hidden sm:inline">Fundo Escuro</span>
+                </>
+              )}
+            </button>
 
             {/* Botão Direto com a Engrenagem para Configurações da Oficina & Cabeçalho */}
             <button
