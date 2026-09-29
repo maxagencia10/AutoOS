@@ -17,9 +17,10 @@ import {
   ArrowLeft,
   MessageSquare,
   FolderOpen,
+  Download,
 } from 'lucide-react';
-import { OrdemServico, StatusOS } from '../types';
-import { OrdemServicoRepository } from '../services/dbRepository';
+import { OrdemServico, StatusOS, OficinaConfig } from '../types';
+import { OrdemServicoRepository, OficinaRepository } from '../services/dbRepository';
 import {
   formatCurrency,
   formatDate,
@@ -27,7 +28,8 @@ import {
   getStatusBadgeInfo,
   buildWhatsAppLink,
 } from '../utils/formatters';
-import { openPDFFolderInExplorer } from '../utils/pdfGenerator';
+import { openPDFFolderInExplorer, buildOSFilename, triggerPDFDownload, savePDFToServerFolder } from '../utils/pdfGenerator';
+import { generateOSPDFVectorDirect } from '../utils/pdfDirectGenerator';
 import { useAuth } from '../context/AuthContext';
 import { ModalEnvioWhatsAppOS } from './ModalEnvioWhatsAppOS';
 
@@ -50,10 +52,22 @@ export const OrdensServicoView: React.FC<OrdensServicoViewProps> = ({
   const [filtroStatus, setFiltroStatus] = useState<string>('TODAS');
   const [loading, setLoading] = useState(true);
   const [osParaWhatsApp, setOsParaWhatsApp] = useState<OrdemServico | null>(null);
+  const [oficina, setOficina] = useState<OficinaConfig | null>(null);
+
+  useEffect(() => {
+    OficinaRepository.get().then((of) => setOficina(of)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     carregarOrdens();
   }, [search, filtroStatus]);
+
+  const handleBaixarPDFTabela = (osItem: OrdemServico) => {
+    const filename = buildOSFilename(osItem);
+    const pdfRes = generateOSPDFVectorDirect(osItem, oficina, filename);
+    triggerPDFDownload(pdfRes.blob, filename);
+    savePDFToServerFolder(filename, pdfRes.blob).catch(() => {});
+  };
 
   const carregarOrdens = async () => {
     setLoading(true);
@@ -276,15 +290,23 @@ export const OrdensServicoView: React.FC<OrdensServicoViewProps> = ({
                           <button
                             onClick={() => onVisualizarOS(os)}
                             title="Visualizar Detalhes e Imprimir A4"
-                            className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-md transition border border-zinc-700"
+                            className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-md transition border border-zinc-700 cursor-pointer"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
 
                           <button
+                            onClick={() => handleBaixarPDFTabela(os)}
+                            title="Baixar Documento Oficial em PDF no computador"
+                            className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-amber-400 hover:text-amber-300 rounded-md transition border border-zinc-700 cursor-pointer"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
                             onClick={() => setOsParaWhatsApp(os)}
                             title="Enviar Ordem de Serviço com PDF via WhatsApp"
-                            className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 hover:text-emerald-300 rounded-md transition border border-emerald-500/40"
+                            className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 hover:text-emerald-300 rounded-md transition border border-emerald-500/40 cursor-pointer"
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
                           </button>

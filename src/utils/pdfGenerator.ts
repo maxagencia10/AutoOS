@@ -73,14 +73,34 @@ export async function generateOSPDFFromElement(
   filename: string
 ): Promise<PDFResult> {
   // Configurações otimizadas para A4 (210mm x 297mm) com scale 2 para alta nitidez
-  const canvas = await html2canvas(element, {
-    scale: 2,
-    useCORS: true,
-    allowTaint: true,
-    backgroundColor: '#ffffff',
-    logging: false,
-    windowWidth: 794,
-  });
+  let canvas: HTMLCanvasElement;
+  try {
+    canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      windowWidth: 794,
+      scrollX: 0,
+      scrollY: 0,
+      imageTimeout: 15000,
+    });
+  } catch (err: any) {
+    console.warn('html2canvas primário falhou, tentando fallback com scale 1.5...', err);
+    canvas = await html2canvas(element, {
+      scale: 1.5,
+      useCORS: false,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      windowWidth: 794,
+    });
+  }
+
+  if (!canvas || canvas.width === 0 || canvas.height === 0) {
+    throw new Error('Falha ao capturar a imagem do documento da OS para gerar o PDF.');
+  }
 
   const imgData = canvas.toDataURL('image/jpeg', 0.95);
 

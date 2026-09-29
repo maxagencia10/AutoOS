@@ -19,13 +19,16 @@ import {
   MousePointer,
   Settings,
   MessageSquare,
+  Download,
 } from 'lucide-react';
-import { OrdemServico } from '../types';
-import { OrdemServicoRepository } from '../services/dbRepository';
+import { OrdemServico, OficinaConfig } from '../types';
+import { OrdemServicoRepository, OficinaRepository } from '../services/dbRepository';
 import { formatCurrency, formatDate, getStatusBadgeInfo, formatPlaca } from '../utils/formatters';
 import { ModalEnvioWhatsAppOS } from './ModalEnvioWhatsAppOS';
 import { verificarPacotesPastaAtualizacoes } from '../services/atualizacaoScanner';
 import { ArrowUpCircle } from 'lucide-react';
+import { generateOSPDFVectorDirect } from '../utils/pdfDirectGenerator';
+import { buildOSFilename, triggerPDFDownload, savePDFToServerFolder } from '../utils/pdfGenerator';
 
 interface DashboardProps {
   onNovaOS: () => void;
@@ -67,6 +70,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [loading, setLoading] = useState(true);
   const [osParaWhatsApp, setOsParaWhatsApp] = useState<OrdemServico | null>(null);
   const [pacotesPendentes, setPacotesPendentes] = useState<number>(0);
+  const [oficina, setOficina] = useState<OficinaConfig | null>(null);
+
+  useEffect(() => {
+    OficinaRepository.get().then((of) => setOficina(of)).catch(() => {});
+  }, []);
+
+  const handleBaixarPDFDash = (osItem: OrdemServico) => {
+    const filename = buildOSFilename(osItem);
+    const pdfRes = generateOSPDFVectorDirect(osItem, oficina, filename);
+    triggerPDFDownload(pdfRes.blob, filename);
+    savePDFToServerFolder(filename, pdfRes.blob).catch(() => {});
+  };
 
   useEffect(() => {
     carregarDados();
@@ -455,16 +470,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           <button
                             onClick={() => onVisualizarOS(os)}
                             title="Visualizar OS e Imprimir A4"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition border border-zinc-700"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium transition border border-zinc-700 cursor-pointer"
                           >
                             <Eye className="w-3.5 h-3.5 text-zinc-400" />
                             <span>Ver</span>
                           </button>
 
                           <button
+                            onClick={() => handleBaixarPDFDash(os)}
+                            title="Baixar Documento Oficial em PDF no computador"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-400 hover:text-amber-300 text-xs font-medium transition border border-zinc-700 cursor-pointer"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">PDF</span>
+                          </button>
+
+                          <button
                             onClick={() => setOsParaWhatsApp(os)}
                             title="Enviar Ordem de Serviço com PDF via WhatsApp"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 hover:text-emerald-300 text-xs font-medium transition border border-emerald-500/40"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 hover:text-emerald-300 text-xs font-medium transition border border-emerald-500/40 cursor-pointer"
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
                             <span className="hidden sm:inline">WhatsApp</span>

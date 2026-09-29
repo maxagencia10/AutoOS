@@ -30,6 +30,7 @@ import {
   getPDFFolderInfo,
   PDFResult,
 } from '../utils/pdfGenerator';
+import { generateOSPDFVectorDirect } from '../utils/pdfDirectGenerator';
 import { OficinaRepository } from '../services/dbRepository';
 import { formatPhone } from '../utils/formatters';
 
@@ -85,20 +86,30 @@ export const ModalEnvioWhatsAppOS: React.FC<ModalEnvioWhatsAppOSProps> = ({
       setGerandoPDF(true);
       setErroPDF('');
       try {
-        // Aguarda 450ms para garantir carregamento de fontes e renderização do DOM
-        await new Promise((r) => setTimeout(r, 450));
-        if (cancelado) return;
+        let res: PDFResult | null = null;
 
-        const targetElement = docRef.current || document.getElementById('documento-ordem-servico-a4');
-        if (!targetElement) {
-          throw new Error('Não foi possível localizar o documento da OS para gerar o PDF.');
+        // 1. Tenta gerar via DOM de impressão com timeout de segurança
+        try {
+          await new Promise((r) => setTimeout(r, 150));
+          if (cancelado) return;
+
+          const targetElement = docRef.current || document.getElementById('documento-ordem-servico-a4');
+          if (targetElement) {
+            res = await generateOSPDFFromElement(targetElement, filename);
+          }
+        } catch (domErr) {
+          console.warn('[AutoOS] Geração via DOM falhou ou demorou, usando gerador vetorial de alta precisão:', domErr);
         }
 
-        const res = await generateOSPDFFromElement(targetElement, filename);
+        // 2. Se por qualquer motivo a renderização DOM falhar, usa o gerador vetorial nativo jsPDF
+        if (!res) {
+          res = generateOSPDFVectorDirect(os, oficina, filename);
+        }
+
         if (cancelado) return;
         setPdfResult(res);
 
-        // Salva automaticamente na pasta dedicada
+        // 3. Salva automaticamente na pasta dedicada
         setSalvandoPasta(true);
         const saveRes = await savePDFToServerFolder(filename, res.blob);
         if (!cancelado) {
@@ -112,8 +123,17 @@ export const ModalEnvioWhatsAppOS: React.FC<ModalEnvioWhatsAppOSProps> = ({
         }
       } catch (err: any) {
         console.error('Erro ao gerar/salvar PDF da OS:', err);
-        if (!cancelado) {
-          setErroPDF(err.message || 'Falha ao processar o PDF da Ordem de Serviço.');
+        // Último recurso de recuperação imediata
+        try {
+          const fallbackRes = generateOSPDFVectorDirect(os, oficina, filename);
+          if (!cancelado) {
+            setPdfResult(fallbackRes);
+            savePDFToServerFolder(filename, fallbackRes.blob).catch(() => {});
+          }
+        } catch (e2) {
+          if (!cancelado) {
+            setErroPDF(err.message || 'Falha ao processar o PDF da Ordem de Serviço.');
+          }
         }
       } finally {
         if (!cancelado) {
@@ -128,7 +148,7 @@ export const ModalEnvioWhatsAppOS: React.FC<ModalEnvioWhatsAppOSProps> = ({
     return () => {
       cancelado = true;
     };
-  }, [os.id, filename]);
+  }, [os.id, filename, oficina]);
 
   const handleCopiarMensagem = async () => {
     try {
@@ -169,8 +189,13 @@ export const ModalEnvioWhatsAppOS: React.FC<ModalEnvioWhatsAppOSProps> = ({
   };
 
   const handleBaixarPDF = () => {
-    if (!pdfResult) return;
-    triggerPDFDownload(pdfResult.blob, filename);
+    let res = pdfResult;
+    if (!res) {
+      res = generateOSPDFVectorDirect(os, oficina, filename);
+      setPdfResult(res);
+      savePDFToServerFolder(filename, res.blob).catch(() => {});
+    }
+    triggerPDFDownload(res.blob, filename);
   };
 
   const handleEnviarWhatsApp = async () => {
@@ -180,13 +205,21 @@ export const ModalEnvioWhatsAppOS: React.FC<ModalEnvioWhatsAppOSProps> = ({
       return;
     }
 
+    // Garante que o PDF existe imediatamente
+    let res = pdfResult;
+    if (!res) {
+      res = generateOSPDFVectorDirect(os, oficina, filename);
+      setPdfResult(res);
+      savePDFToServerFolder(filename, res.blob).catch(() => {});
+    }
+
     // 1. Tenta compartilhamento nativo com o arquivo PDF anexado via Web Share API
-    if (pdfResult && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+    if (res && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
       try {
         const shareData = {
           title: `Ordem de Serviço ${os.numero_formatado || os.id}`,
           text: mensagemWhatsApp,
-          files: [pdfResult.file],
+          files: [res.file],
         };
 
         if (navigator.canShare(shareData)) {
@@ -201,8 +234,8 @@ export const ModalEnvioWhatsAppOS: React.FC<ModalEnvioWhatsAppOSProps> = ({
     }
 
     // 2. Garante o salvamento local do arquivo e faz download preventivo
-    if (pdfResult) {
-      triggerPDFDownload(pdfResult.blob, filename);
+    if (res) {
+      triggerPDFDownload(res.blob, filename);
     }
 
     // 3. Tenta abrir a pasta exclusiva no Windows para facilitar o arraste
@@ -304,12 +337,11 @@ export const ModalEnvioWhatsAppOS: React.FC<ModalEnvioWhatsAppOSProps> = ({
               <button
                 type="button"
                 onClick={handleBaixarPDF}
-                disabled={gerandoPDF || !pdfResult}
-                title="Baixar arquivo PDF diretamente no navegador"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-300 hover:text-white rounded-lg text-xs font-medium transition border border-zinc-700 disabled:opacity-50 cursor-pointer"
+                title="Baixar arquivo PDF diretamente no seu computador"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-300 hover:text-white rounded-lg text-xs font-medium transition border border-zinc-700 cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Baixar</span>
+                <span className="hidden sm:inline">Baixar PDF</span>
               </button>
             </div>
           </div>
@@ -449,20 +481,10 @@ export const ModalEnvioWhatsAppOS: React.FC<ModalEnvioWhatsAppOSProps> = ({
             type="button"
             id="btn-confirmar-envio-whatsapp"
             onClick={handleEnviarWhatsApp}
-            disabled={gerandoPDF}
-            className="w-full sm:w-auto flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-emerald-950 transition border border-emerald-500 disabled:opacity-50 cursor-pointer"
+            className="w-full sm:w-auto flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-emerald-950 transition border border-emerald-500 cursor-pointer"
           >
-            {gerandoPDF ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Preparando PDF na pasta...</span>
-              </>
-            ) : (
-              <>
-                <MessageSquare className="w-4 h-4" />
-                <span>Abrir WhatsApp & Anexar OS</span>
-              </>
-            )}
+            <MessageSquare className="w-4 h-4" />
+            <span>Abrir WhatsApp & Anexar OS</span>
           </button>
         </div>
 
@@ -472,16 +494,19 @@ export const ModalEnvioWhatsAppOS: React.FC<ModalEnvioWhatsAppOSProps> = ({
       <div
         style={{
           position: 'fixed',
-          left: '-9999px',
-          top: '-9999px',
+          left: '0px',
+          top: '0px',
           width: '794px',
-          zIndex: -1,
-          opacity: 0,
+          minHeight: '1123px',
+          zIndex: -9999,
+          opacity: 0.01,
           pointerEvents: 'none',
+          backgroundColor: '#ffffff',
+          overflow: 'visible',
         }}
         aria-hidden="true"
       >
-        <div ref={docRef}>
+        <div ref={docRef} style={{ width: '794px', backgroundColor: '#ffffff' }}>
           <DocumentoOSImpressao os={os} oficina={oficina} />
         </div>
       </div>

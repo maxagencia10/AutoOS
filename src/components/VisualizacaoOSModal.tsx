@@ -33,6 +33,8 @@ import {
   buildWhatsAppLink,
 } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
+import { generateOSPDFVectorDirect } from '../utils/pdfDirectGenerator';
+import { buildOSFilename, triggerPDFDownload, savePDFToServerFolder } from '../utils/pdfGenerator';
 
 interface VisualizacaoOSModalProps {
   os: OrdemServico;
@@ -254,6 +256,13 @@ export const VisualizacaoOSModal: React.FC<VisualizacaoOSModalProps> = ({
     }
   };
 
+  const handleBaixarPDFDireto = () => {
+    const filename = buildOSFilename(os);
+    const pdfRes = generateOSPDFVectorDirect(os, oficina, filename);
+    triggerPDFDownload(pdfRes.blob, filename);
+    savePDFToServerFolder(filename, pdfRes.blob).catch(() => {});
+  };
+
   const badge = getStatusBadgeInfo(os.status);
 
   return (
@@ -275,6 +284,16 @@ export const VisualizacaoOSModal: React.FC<VisualizacaoOSModalProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+            <button
+              onClick={handleBaixarPDFDireto}
+              id="btn-baixar-pdf-os"
+              title="Gerar e Baixar Documento Oficial em PDF no computador"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-200 hover:text-white rounded-lg text-xs font-bold shadow-md transition border border-zinc-700 cursor-pointer"
+            >
+              <Download className="w-4 h-4 text-amber-400" />
+              <span>Baixar PDF</span>
+            </button>
+
             <button
               onClick={handlePrint}
               id="btn-imprimir-os"
