@@ -46,17 +46,21 @@ export const OrdensServicoView: React.FC<OrdensServicoViewProps> = ({
   onEditarOS,
   onVoltar,
 }) => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, oficinaAtiva } = useAuth();
   const [ordens, setOrdens] = useState<OrdemServico[]>([]);
   const [search, setSearch] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<string>('TODAS');
   const [loading, setLoading] = useState(true);
   const [osParaWhatsApp, setOsParaWhatsApp] = useState<OrdemServico | null>(null);
-  const [oficina, setOficina] = useState<OficinaConfig | null>(null);
+  const [oficina, setOficina] = useState<OficinaConfig | null>(oficinaAtiva || null);
 
   useEffect(() => {
-    OficinaRepository.get().then((of) => setOficina(of)).catch(() => {});
-  }, []);
+    if (oficinaAtiva) {
+      setOficina(oficinaAtiva);
+    } else {
+      OficinaRepository.get().then((of) => setOficina(of)).catch(() => {});
+    }
+  }, [oficinaAtiva]);
 
   useEffect(() => {
     carregarOrdens();
@@ -235,109 +239,218 @@ export const OrdensServicoView: React.FC<OrdensServicoViewProps> = ({
             <p className="text-zinc-500 text-xs mt-1">Crie uma nova OS utilizando o botão acima.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs sm:text-sm">
-              <thead className="bg-zinc-950 text-zinc-400 uppercase text-[11px] font-semibold border-b border-zinc-800">
-                <tr>
-                  <th className="px-4 py-3">Número</th>
-                  <th className="px-4 py-3">Data / Hora</th>
-                  <th className="px-4 py-3">Cliente</th>
-                  <th className="px-4 py-3">Veículo / Placa</th>
-                  <th className="px-4 py-3">Quilometragem</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Total (R$)</th>
-                  <th className="px-4 py-3 text-center">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/60">
-                {ordens.map((os) => {
-                  const badge = getStatusBadgeInfo(os.status);
-                  return (
-                    <tr key={os.id} className="hover:bg-zinc-800/40 transition">
-                      <td className="px-4 py-3.5 font-mono font-bold text-white whitespace-nowrap">
-                        {os.numero_formatado}
-                      </td>
-                      <td className="px-4 py-3.5 text-zinc-300 whitespace-nowrap">
-                        <div>{formatDate(os.data)}</div>
-                        <div className="text-[10px] text-zinc-500">{os.hora}</div>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="font-semibold text-zinc-100">{os.cliente_nome}</div>
-                        <div className="text-[11px] text-zinc-400">{os.cliente_telefone}</div>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="font-medium text-zinc-200">{os.veiculo_modelo}</div>
-                        <div className="text-[11px] font-mono font-semibold text-red-400">
-                          {formatPlaca(os.veiculo_placa)}
+          <>
+            {/* Visualização em Lista de Cards para Dispositivos Móveis (Celulares e Telas Menores) */}
+            <div className="md:hidden divide-y divide-zinc-800">
+              {ordens.map((os) => {
+                const badge = getStatusBadgeInfo(os.status);
+                return (
+                  <div key={os.id} className="p-4 space-y-3 bg-zinc-900/60 hover:bg-zinc-800/40 transition">
+                    {/* Linha 1: Número, Status e Valor */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="font-mono font-bold text-white text-base">
+                          {os.numero_formatado}
+                        </span>
+                        <div className="text-[11px] text-zinc-400 mt-0.5">
+                          {formatDate(os.data)} às {os.hora}
                         </div>
-                      </td>
-                      <td className="px-4 py-3.5 font-mono text-zinc-300 whitespace-nowrap">
-                        {os.quilometragem.toLocaleString('pt-BR')} km
-                      </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap">
+                      </div>
+                      <div className="text-right">
+                        <div className="font-mono font-bold text-white text-sm">
+                          {formatCurrency(os.total)}
+                        </div>
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${badge.bg} ${badge.text} border ${badge.border}`}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${badge.bg} ${badge.text} border ${badge.border} mt-1`}
                         >
                           <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
                           {os.status}
                         </span>
-                      </td>
-                      <td className="px-4 py-3.5 text-right font-mono font-bold text-white whitespace-nowrap">
-                        {formatCurrency(os.total)}
-                      </td>
-                      <td className="px-4 py-3.5 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => onVisualizarOS(os)}
-                            title="Visualizar Detalhes e Imprimir A4"
-                            className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-md transition border border-zinc-700 cursor-pointer"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
+                      </div>
+                    </div>
 
-                          <button
-                            onClick={() => handleBaixarPDFTabela(os)}
-                            title="Baixar Documento Oficial em PDF no computador"
-                            className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-amber-400 hover:text-amber-300 rounded-md transition border border-zinc-700 cursor-pointer"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
-
-                          <button
-                            onClick={() => setOsParaWhatsApp(os)}
-                            title="Enviar Ordem de Serviço com PDF via WhatsApp"
-                            className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 hover:text-emerald-300 rounded-md transition border border-emerald-500/40 cursor-pointer"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                          </button>
-
-                          {os.status !== 'CANCELADA' && (
-                            <button
-                              onClick={() => onEditarOS(os)}
-                              title="Editar Ordem de Serviço"
-                              className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition border border-zinc-700"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
-                          {isAdmin && (
-                            <button
-                              onClick={() => handleExcluirOS(os.id, os.numero_formatado)}
-                              title="Excluir Definitivamente"
-                              className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-zinc-800 rounded-md transition"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                    {/* Linha 2: Cliente e Veículo */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-zinc-950/60 p-2.5 rounded-lg border border-zinc-800/60">
+                      <div>
+                        <span className="text-[10px] text-zinc-400 uppercase font-semibold block">Cliente</span>
+                        <div className="font-medium text-zinc-200 truncate">{os.cliente_nome}</div>
+                        {os.cliente_telefone && (
+                          <div className="text-[11px] text-zinc-400">{os.cliente_telefone}</div>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-zinc-400 uppercase font-semibold block">Veículo</span>
+                        <div className="font-medium text-zinc-200 truncate">{os.veiculo_modelo}</div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] font-mono font-bold text-red-400 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">
+                            {formatPlaca(os.veiculo_placa)}
+                          </span>
+                          <span className="text-[10px] text-zinc-400 font-mono">
+                            {os.quilometragem.toLocaleString('pt-BR')} km
+                          </span>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </div>
+
+                    {/* Linha 3: Barra Completa de Botões de Ação para Celular - 100% Visível */}
+                    <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between gap-1.5 flex-wrap">
+                      <button
+                        onClick={() => onVisualizarOS(os)}
+                        title="Visualizar Detalhes e Imprimir A4"
+                        className="flex-1 min-w-[70px] flex items-center justify-center gap-1 px-2.5 py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-200 rounded-lg text-xs font-medium transition border border-zinc-700 cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-zinc-400" />
+                        <span>Ver</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleBaixarPDFTabela(os)}
+                        title="Baixar Documento Oficial em PDF"
+                        className="flex-1 min-w-[70px] flex items-center justify-center gap-1 px-2.5 py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-amber-400 rounded-lg text-xs font-semibold transition border border-zinc-700 cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>PDF</span>
+                      </button>
+
+                      <button
+                        onClick={() => setOsParaWhatsApp(os)}
+                        title="Enviar via WhatsApp"
+                        className="flex-1 min-w-[90px] flex items-center justify-center gap-1 px-2.5 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 active:bg-emerald-600/40 text-emerald-400 rounded-lg text-xs font-semibold transition border border-emerald-500/40 cursor-pointer"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>WhatsApp</span>
+                      </button>
+
+                      {os.status !== 'CANCELADA' && (
+                        <button
+                          onClick={() => onEditarOS(os)}
+                          title="Editar Ordem de Serviço"
+                          className="px-2.5 py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-300 rounded-lg text-xs font-medium transition border border-zinc-700 cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleExcluirOS(os.id, os.numero_formatado)}
+                          title="Excluir Definitivamente"
+                          className="p-2 text-zinc-500 hover:text-red-400 active:text-red-300 hover:bg-zinc-800 rounded-lg transition cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Visualização em Tabela para Tablets e Desktops (md: e maiores) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs sm:text-sm">
+                <thead className="bg-zinc-950 text-zinc-400 uppercase text-[11px] font-semibold border-b border-zinc-800">
+                  <tr>
+                    <th className="px-4 py-3">Número</th>
+                    <th className="px-4 py-3">Data / Hora</th>
+                    <th className="px-4 py-3">Cliente</th>
+                    <th className="px-4 py-3">Veículo / Placa</th>
+                    <th className="px-4 py-3">Quilometragem</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Total (R$)</th>
+                    <th className="px-4 py-3 text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60">
+                  {ordens.map((os) => {
+                    const badge = getStatusBadgeInfo(os.status);
+                    return (
+                      <tr key={os.id} className="hover:bg-zinc-800/40 transition">
+                        <td className="px-4 py-3.5 font-mono font-bold text-white whitespace-nowrap">
+                          {os.numero_formatado}
+                        </td>
+                        <td className="px-4 py-3.5 text-zinc-300 whitespace-nowrap">
+                          <div>{formatDate(os.data)}</div>
+                          <div className="text-[10px] text-zinc-500">{os.hora}</div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="font-semibold text-zinc-100">{os.cliente_nome}</div>
+                          <div className="text-[11px] text-zinc-400">{os.cliente_telefone}</div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="font-medium text-zinc-200">{os.veiculo_modelo}</div>
+                          <div className="text-[11px] font-mono font-semibold text-red-400">
+                            {formatPlaca(os.veiculo_placa)}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5 font-mono text-zinc-300 whitespace-nowrap">
+                          {os.quilometragem.toLocaleString('pt-BR')} km
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${badge.bg} ${badge.text} border ${badge.border}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
+                            {os.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 text-right font-mono font-bold text-white whitespace-nowrap">
+                          {formatCurrency(os.total)}
+                        </td>
+                        <td className="px-4 py-3.5 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => onVisualizarOS(os)}
+                              title="Visualizar Detalhes e Imprimir A4"
+                              className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-md transition border border-zinc-700 cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              onClick={() => handleBaixarPDFTabela(os)}
+                              title="Baixar Documento Oficial em PDF no computador"
+                              className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-amber-400 hover:text-amber-300 rounded-md transition border border-zinc-700 cursor-pointer"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              onClick={() => setOsParaWhatsApp(os)}
+                              title="Enviar Ordem de Serviço com PDF via WhatsApp"
+                              className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 hover:text-emerald-300 rounded-md transition border border-emerald-500/40 cursor-pointer"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                            </button>
+
+                            {os.status !== 'CANCELADA' && (
+                              <button
+                                onClick={() => onEditarOS(os)}
+                                title="Editar Ordem de Serviço"
+                                className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-md transition border border-zinc-700"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleExcluirOS(os.id, os.numero_formatado)}
+                                title="Excluir Definitivamente"
+                                className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-zinc-800 rounded-md transition"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

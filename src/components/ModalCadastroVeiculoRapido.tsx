@@ -90,27 +90,28 @@ export const ModalCadastroVeiculoRapido: React.FC<ModalCadastroVeiculoRapidoProp
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
-      <div className="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-xl w-full p-4 sm:p-6 shadow-2xl relative my-6 flex flex-col">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
+      <div className="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-xl w-full p-3 sm:p-6 shadow-2xl relative my-auto sm:my-6 max-h-[94dvh] sm:max-h-[90vh] flex flex-col overflow-y-auto">
         {/* Cabeçalho */}
-        <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+        <div className="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400">
-              <Car className="w-5 h-5" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
+              <Car className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
                 Cadastrar Veículo do Cliente
               </h3>
-              <p className="text-xs text-zinc-400">
-                Adicione um novo ou mais um veículo vinculado a este cliente
+              <p className="text-[11px] sm:text-xs text-zinc-400">
+                Adicione um novo veículo vinculado a este cliente
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition"
+            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition cursor-pointer shrink-0"
+            title="Fechar"
           >
             <X className="w-5 h-5" />
           </button>
@@ -281,19 +282,19 @@ export const ModalCadastroVeiculoRapido: React.FC<ModalCadastroVeiculoRapidoProp
             </span>
           </div>
 
-          {/* Botões de Ação */}
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-800">
+          {/* Botões de Ação - Fixos no Rodapé */}
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-zinc-800 sticky bottom-0 bg-zinc-900/98 backdrop-blur-md z-10">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-lg transition font-medium"
+              className="px-4 py-2 text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 rounded-lg transition font-medium cursor-pointer text-xs sm:text-sm"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={salvando}
-              className="px-5 py-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-bold rounded-lg shadow-md transition flex items-center gap-2 disabled:opacity-50"
+              className="px-5 py-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-bold rounded-lg shadow-md transition flex items-center gap-2 disabled:opacity-50 cursor-pointer text-xs sm:text-sm"
             >
               {salvando ? (
                 <>
@@ -303,7 +304,7 @@ export const ModalCadastroVeiculoRapido: React.FC<ModalCadastroVeiculoRapidoProp
               ) : (
                 <>
                   <Car className="w-4 h-4" />
-                  <span>Salvar e Selecionar na OS</span>
+                  <span>Salvar e Selecionar</span>
                 </>
               )}
             </button>

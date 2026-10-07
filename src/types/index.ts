@@ -1,4 +1,8 @@
-export type PerfilUsuario = 'ADMINISTRADOR' | 'MECANICO';
+export type PerfilUsuario = 'SUPERADMIN' | 'ADMINISTRADOR' | 'MECANICO';
+
+export type StatusEmpresa = 'ATIVA' | 'EM_TESTE' | 'BLOQUEADA' | 'CANCELADA';
+
+export type PlanoSaaS = 'BRONZE' | 'PRATA' | 'OURO' | 'PRO' | 'ILIMITADO';
 
 export type StatusOS =
   | 'ABERTA'
@@ -44,6 +48,13 @@ export interface OficinaConfig {
   texto_padrao_garantia: string;
   texto_padrao_condicoes?: string;
   condicoes_gerais?: string;
+  // Campos Micro-SaaS Multi-Empresas
+  status_empresa?: StatusEmpresa;
+  plano?: PlanoSaaS;
+  limite_os_mensal?: number;
+  data_expiracao?: string;
+  responsavel_nome?: string;
+  responsavel_contato?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -112,6 +123,7 @@ export interface ItemOS {
 
 export interface OrdemServico {
   id: string;
+  oficina_id?: string;
   numero: number;
   numero_formatado: string; // Ex: OS Nº 000001
   data: string;             // YYYY-MM-DD

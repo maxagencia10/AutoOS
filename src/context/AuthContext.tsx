@@ -1,17 +1,22 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Usuario } from '../types';
-import { UsuarioRepository, SistemaRepository } from '../services/dbRepository';
+import { Usuario, OficinaConfig } from '../types';
+import { UsuarioRepository, SistemaRepository, OficinaRepository } from '../services/dbRepository';
 
 interface AuthContextType {
   usuarioAtual: Usuario | null;
   usuariosDisponiveis: Usuario[];
+  oficinaAtiva: OficinaConfig | null;
+  oficinasDisponiveis: OficinaConfig[];
+  isSuperAdmin: boolean;
   isAdmin: boolean;
   isMecanico: boolean;
   carregando: boolean;
   isInstalado: boolean;
   verificarInstalacao: () => Promise<boolean>;
   trocarUsuario: (usuarioId: string) => void;
+  selecionarOficina: (oficinaId: string) => Promise<void>;
   recarregarUsuarios: () => Promise<void>;
+  recarregarOficinas: () => Promise<void>;
   podeCancelarOS: boolean;
   podeGerenciarOficina: boolean;
   podeGerenciarUsuarios: boolean;
@@ -24,6 +29,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [usuariosDisponiveis, setUsuariosDisponiveis] = useState<Usuario[]>([]);
   const [usuarioAtual, setUsuarioAtual] = useState<Usuario | null>(null);
+  const [oficinasDisponiveis, setOficinasDisponiveis] = useState<OficinaConfig[]>([]);
+  const [oficinaAtiva, setOficinaAtiva] = useState<OficinaConfig | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [isInstalado, setIsInstalado] = useState<boolean>(true);
 
@@ -38,15 +45,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const recarregarOficinas = async () => {
+    try {
+      const list = await OficinaRepository.getAll();
+      setOficinasDisponiveis(list);
+      
+      const salvaId = localStorage.getItem('autoos_oficina_ativa_id');
+      if (salvaId && list.some(o => o.id === salvaId)) {
+        setOficinaAtiva(list.find(o => o.id === salvaId) || list[0] || null);
+      } else if (list.length > 0) {
+        setOficinaAtiva(list[0]);
+        localStorage.setItem('autoos_oficina_ativa_id', list[0].id);
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar lista de oficinas:', e);
+    }
+  };
+
+  const selecionarOficina = async (oficinaId: string) => {
+    const of = oficinasDisponiveis.find(o => o.id === oficinaId);
+    if (of) {
+      setOficinaAtiva(of);
+      localStorage.setItem('autoos_oficina_ativa_id', of.id);
+    }
+  };
+
   const recarregarUsuarios = async () => {
     try {
-      const [instalado, list] = await Promise.all([
+      const [instalado, list, oficinas] = await Promise.all([
         SistemaRepository.isInstalado(),
         UsuarioRepository.getAll(),
+        OficinaRepository.getAll(),
       ]);
 
       setIsInstalado(instalado);
       setUsuariosDisponiveis(list);
+      setOficinasDisponiveis(oficinas);
+
+      if (oficinas.length > 0) {
+        const salvaId = localStorage.getItem('autoos_oficina_ativa_id');
+        const encontrada = salvaId ? oficinas.find(o => o.id === salvaId) : null;
+        setOficinaAtiva(encontrada || oficinas[0]);
+      }
 
       if (!instalado || list.length === 0) {
         setUsuarioAtual(null);
@@ -84,6 +124,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user) {
       setUsuarioAtual(user);
       localStorage.setItem('autoos_usuario_sessao', user.id);
+      // Se usuário for vinculado a uma oficina específica, sintoniza a oficina ativa
+      if (user.oficina_id && user.perfil !== 'SUPERADMIN') {
+        selecionarOficina(user.oficina_id);
+      }
     }
   };
 
@@ -92,6 +136,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUsuariosDisponiveis([admin]);
     setIsInstalado(true);
     localStorage.setItem('autoos_usuario_sessao', admin.id);
+    recarregarOficinas();
   };
 
   const zerarParaNovaInstalacao = async () => {
@@ -100,29 +145,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await SistemaRepository.zerarParaNovaInstalacao();
       setUsuarioAtual(null);
       setUsuariosDisponiveis([]);
+      setOficinasDisponiveis([]);
+      setOficinaAtiva(null);
       setIsInstalado(false);
     } finally {
       setCarregando(false);
     }
   };
 
-  const isAdmin = !usuarioAtual || 
+  const isSuperAdmin = usuarioAtual?.perfil === 'SUPERADMIN';
+  const isAdmin = isSuperAdmin || !usuarioAtual || 
     usuarioAtual.perfil?.toString().trim().toUpperCase() === 'ADMINISTRADOR' ||
     usuarioAtual.perfil?.toString().trim().toUpperCase() !== 'MECANICO';
-  const isMecanico = usuarioAtual?.perfil?.toString().trim().toUpperCase() === 'MECANICO';
+  const isMecanico = !isSuperAdmin && usuarioAtual?.perfil?.toString().trim().toUpperCase() === 'MECANICO';
 
   return (
     <AuthContext.Provider
       value={{
         usuarioAtual,
         usuariosDisponiveis,
+        oficinaAtiva,
+        oficinasDisponiveis,
+        isSuperAdmin,
         isAdmin,
         isMecanico,
         carregando,
         isInstalado,
         verificarInstalacao,
         trocarUsuario,
+        selecionarOficina,
         recarregarUsuarios,
+        recarregarOficinas,
         podeCancelarOS: isAdmin,
         podeGerenciarOficina: isAdmin,
         podeGerenciarUsuarios: isAdmin,

@@ -41,7 +41,7 @@ interface ConfiguracoesViewProps {
 }
 
 export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAtualizacoes, onVoltar }) => {
-  const { zerarParaNovaInstalacao } = useAuth();
+  const { zerarParaNovaInstalacao, oficinaAtiva, recarregarOficinas } = useAuth();
   const { themeMode, theme, setThemeMode } = useTheme();
   const [formData, setFormData] = useState<OficinaConfig>({
     id: 'oficina_config_1',
@@ -270,12 +270,12 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAt
 
   useEffect(() => {
     carregarConfiguracoes();
-  }, []);
+  }, [oficinaAtiva?.id]);
 
   const carregarConfiguracoes = async () => {
     setLoading(true);
     try {
-      const config = await OficinaRepository.get();
+      const config = await OficinaRepository.get(oficinaAtiva?.id);
       setFormData(config);
     } catch (err) {
       console.error('Erro ao carregar dados da oficina:', err);
@@ -291,7 +291,8 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAt
     setMensagemErro('');
 
     try {
-      await OficinaRepository.update(formData);
+      await OficinaRepository.update(formData, oficinaAtiva?.id);
+      await recarregarOficinas();
       setMensagemSucesso('Dados da oficina atualizados com sucesso no banco de dados!');
       setTimeout(() => setMensagemSucesso(''), 4000);
     } catch (err: any) {
@@ -987,14 +988,14 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAt
           </div>
         </div>
 
-        <div className="flex justify-end pt-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end pt-2">
           <button
             type="submit"
             disabled={salvando}
             id="btn-salvar-config"
-            className="flex items-center gap-2 px-6 py-2.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-semibold rounded-lg shadow-lg shadow-red-950 transition border border-red-500 disabled:opacity-50"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-semibold rounded-lg shadow-lg shadow-red-950 transition border border-red-500 disabled:opacity-50 cursor-pointer text-sm"
           >
-            <Save className="w-4 h-4" />
+            <Save className="w-4 h-4 shrink-0" />
             <span>{salvando ? 'Gravando no Banco...' : 'Salvar Alterações'}</span>
           </button>
         </div>
@@ -1021,7 +1022,7 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAt
                 await zerarParaNovaInstalacao();
               }
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-red-950 hover:text-red-400 hover:border-red-800 text-zinc-300 text-xs font-semibold rounded-lg transition border border-zinc-700"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-red-950 hover:text-red-400 hover:border-red-800 text-zinc-300 text-xs font-semibold rounded-lg transition border border-zinc-700 cursor-pointer"
           >
             <Sparkles className="w-4 h-4 text-red-400" />
             <span>Zerar Sistema e Abrir Assistente de Instalação</span>

@@ -379,9 +379,9 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
 
       {/* Modal Cadastro/Edição de Veículo */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative my-8">
-            <div className="flex items-center justify-between pb-4 border-b border-zinc-800 mb-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl relative my-auto sm:my-6 max-h-[94dvh] sm:max-h-[92vh] flex flex-col overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-zinc-800 mb-4 sm:mb-5 shrink-0">
               <div className="flex items-center gap-2">
                 <Car className="w-5 h-5 text-red-500" />
                 <h2 className="text-lg font-bold text-white">
@@ -569,9 +569,9 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
 
       {/* Modal Histórico do Veículo (Section 28) */}
       {detalheVeiculo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-4xl w-full p-6 shadow-2xl relative my-8 max-h-[90vh] flex flex-col">
-            <div className="flex items-start justify-between pb-4 border-b border-zinc-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-4xl w-full p-4 sm:p-6 shadow-2xl relative my-auto sm:my-6 max-h-[94dvh] sm:max-h-[90vh] flex flex-col">
+            <div className="flex items-start justify-between pb-3 sm:pb-4 border-b border-zinc-800 shrink-0">
               <div>
                 <span className="text-xs font-semibold text-red-400 uppercase tracking-wider">
                   Histórico Técnico do Veículo

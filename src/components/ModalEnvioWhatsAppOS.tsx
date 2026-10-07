@@ -253,17 +253,17 @@ export const ModalEnvioWhatsAppOS: React.FC<ModalEnvioWhatsAppOSProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-3 sm:p-5 overflow-y-auto no-print">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl relative my-6 flex flex-col space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto no-print">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl relative my-auto sm:my-6 max-h-[94dvh] sm:max-h-[92vh] flex flex-col space-y-3 sm:space-y-4 overflow-y-auto">
         
         {/* Cabeçalho */}
-        <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+        <div className="flex items-start sm:items-center justify-between gap-2 pb-3 border-b border-zinc-800 shrink-0">
+          <div className="flex items-start sm:items-center gap-2.5 sm:gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-600/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5 sm:mt-0">
               <MessageSquare className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
                   Enviar Ordem de Serviço via WhatsApp
                 </h2>
@@ -271,7 +271,7 @@ export const ModalEnvioWhatsAppOS: React.FC<ModalEnvioWhatsAppOSProps> = ({
                   {os.numero_formatado || `#${os.id.slice(0, 6)}`}
                 </span>
               </div>
-              <p className="text-xs text-zinc-400">
+              <p className="text-[11px] sm:text-xs text-zinc-400">
                 Geração em PDF oficial de alta definição com pasta exclusiva no computador.
               </p>
             </div>
@@ -279,7 +279,8 @@ export const ModalEnvioWhatsAppOS: React.FC<ModalEnvioWhatsAppOSProps> = ({
 
           <button
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition cursor-pointer"
+            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition cursor-pointer shrink-0"
+            title="Fechar"
           >
             <X className="w-5 h-5" />
           </button>
@@ -458,12 +459,12 @@ export const ModalEnvioWhatsAppOS: React.FC<ModalEnvioWhatsAppOSProps> = ({
           </div>
         </div>
 
-        {/* Botões de Ação Inferiores */}
-        <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5 pt-2 border-t border-zinc-800">
+        {/* Botões de Ação Inferiores - Fixos no Rodapé */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-2.5 pt-3 border-t border-zinc-800 shrink-0 sticky bottom-0 bg-zinc-900/98 backdrop-blur-md -mx-4 -mb-4 sm:-mx-6 sm:-mb-6 p-3 sm:p-5 rounded-b-2xl z-10 shadow-2xl">
           <button
             type="button"
             onClick={onClose}
-            className="w-full sm:w-auto px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-300 hover:text-white rounded-xl text-xs font-semibold transition border border-zinc-700 cursor-pointer"
+            className="w-full sm:w-auto px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-300 hover:text-white rounded-xl text-xs font-semibold transition border border-zinc-700 cursor-pointer text-center"
           >
             Fechar
           </button>
@@ -471,19 +472,19 @@ export const ModalEnvioWhatsAppOS: React.FC<ModalEnvioWhatsAppOSProps> = ({
           <button
             type="button"
             onClick={handleAbrirPastaWindows}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-amber-300 hover:text-amber-200 rounded-xl text-xs font-bold transition border border-amber-500/40 cursor-pointer"
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-amber-300 hover:text-amber-200 rounded-xl text-xs font-bold transition border border-amber-500/40 cursor-pointer"
           >
-            <FolderOpen className="w-4 h-4 text-amber-400" />
-            <span>Abrir Pasta PDFs_OS</span>
+            <FolderOpen className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Abrir Pasta PDFs</span>
           </button>
 
           <button
             type="button"
             id="btn-confirmar-envio-whatsapp"
             onClick={handleEnviarWhatsApp}
-            className="w-full sm:w-auto flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-emerald-950 transition border border-emerald-500 cursor-pointer"
+            className="w-full sm:w-auto flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-emerald-950 transition border border-emerald-500 cursor-pointer"
           >
-            <MessageSquare className="w-4 h-4" />
+            <MessageSquare className="w-4 h-4 shrink-0" />
             <span>Abrir WhatsApp & Anexar OS</span>
           </button>
         </div>

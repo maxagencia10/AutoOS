@@ -44,6 +44,12 @@ CREATE TABLE IF NOT EXISTS oficina (
     texto_institucional TEXT,
     texto_padrao_garantia TEXT,
     texto_padrao_condicoes TEXT,
+    status_empresa VARCHAR(30) DEFAULT 'ATIVA',
+    plano VARCHAR(30) DEFAULT 'PRO',
+    limite_os_mensal INTEGER DEFAULT 500,
+    data_expiracao VARCHAR(30),
+    responsavel_nome VARCHAR(150),
+    responsavel_contato VARCHAR(100),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -94,6 +100,7 @@ CREATE TABLE IF NOT EXISTS veiculos (
 
 CREATE TABLE IF NOT EXISTS ordens_servico (
     id VARCHAR(50) PRIMARY KEY,
+    oficina_id VARCHAR(50) DEFAULT 'oficina_matriz',
     numero INTEGER NOT NULL,
     numero_formatado VARCHAR(20) NOT NULL,
     data VARCHAR(10) NOT NULL,
@@ -205,7 +212,7 @@ async function initializeDatabase(db: PGlite): Promise<void> {
   // 1. Executa criação das tabelas
   await db.exec(SCHEMA_DDL);
 
-  // Garante que as novas colunas de cabeçalho existam
+  // Garante que as novas colunas de cabeçalho e Micro-SaaS multi-tenant existam
   try {
     await db.exec(`
       ALTER TABLE oficina ADD COLUMN IF NOT EXISTS banner_cabecalho TEXT;
@@ -213,6 +220,16 @@ async function initializeDatabase(db: PGlite): Promise<void> {
       ALTER TABLE oficina ADD COLUMN IF NOT EXISTS cabecalho_logo TEXT;
       ALTER TABLE oficina ADD COLUMN IF NOT EXISTS cabecalho_escritas TEXT;
       ALTER TABLE oficina ADD COLUMN IF NOT EXISTS modo_cabecalho VARCHAR(30) DEFAULT 'composto';
+      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS status_empresa VARCHAR(30) DEFAULT 'ATIVA';
+      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS plano VARCHAR(30) DEFAULT 'PRO';
+      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS limite_os_mensal INTEGER DEFAULT 500;
+      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS data_expiracao VARCHAR(30);
+      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS responsavel_nome VARCHAR(150);
+      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS responsavel_contato VARCHAR(100);
+
+      ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS oficina_id VARCHAR(50) DEFAULT 'oficina_matriz';
+      ALTER TABLE clientes ADD COLUMN IF NOT EXISTS oficina_id VARCHAR(50) DEFAULT 'oficina_matriz';
+      ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS oficina_id VARCHAR(50) DEFAULT 'oficina_matriz';
     `);
   } catch (e) {
     // Ignora caso já existam

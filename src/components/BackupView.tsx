@@ -14,6 +14,8 @@ import {
   Sparkles,
   X,
   ArrowLeft,
+  Server,
+  Building2,
 } from 'lucide-react';
 import {
   BackupRepository,
@@ -298,11 +300,42 @@ export const BackupView: React.FC<BackupViewProps> = ({ onVoltar }) => {
         </div>
       </div>
 
+      {/* Guia de Migração para Hospedagem Padrão (Micro-SaaS) */}
+      <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border border-emerald-500/30 rounded-xl p-5 space-y-3">
+        <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm border-b border-zinc-800 pb-2">
+          <Server className="w-4 h-4 text-emerald-400" />
+          <span>3. Migração para Hospedagem Padrão (VPS / Hostinger / AWS / DigitalOcean)</span>
+        </div>
+        <p className="text-xs text-zinc-300 leading-relaxed">
+          Este sistema foi arquitetado em <strong>PostgreSQL Nativo Multi-Tenant</strong>. Quando você decidir transferir seu Micro-SaaS para uma VPS ou hospedagem própria, o processo é 100% livre de amarras:
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1 text-xs">
+          <div className="bg-zinc-950/70 border border-zinc-800/80 p-3 rounded-lg">
+            <strong className="text-white block mb-1">Passo 1: Baixar Dump SQL</strong>
+            <span className="text-zinc-400">
+              Clique em <em>"Exportar Script SQL"</em> acima para obter o arquivo estruturado com todas as tabelas e dados de todas as oficinas.
+            </span>
+          </div>
+          <div className="bg-zinc-950/70 border border-zinc-800/80 p-3 rounded-lg">
+            <strong className="text-white block mb-1">Passo 2: Subir na VPS</strong>
+            <span className="text-zinc-400">
+              Em qualquer servidor com Docker ou PostgreSQL padrão, execute <code className="text-emerald-400 font-mono">psql &lt; dump.sql</code>.
+            </span>
+          </div>
+          <div className="bg-zinc-950/70 border border-zinc-800/80 p-3 rounded-lg">
+            <strong className="text-white block mb-1">Passo 3: Domínio & SSL</strong>
+            <span className="text-zinc-400">
+              Aponte seu domínio (ex: <code className="text-amber-400 font-mono">app.suaplataforma.com.br</code>) e ative SSL gratuito via Certbot.
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Seção de Manutenção e Zerar Sistema para Nova Instalação */}
       <div className="bg-zinc-900 border border-red-950/50 rounded-xl p-5 space-y-4">
         <div className="flex items-center gap-2 text-red-400 font-bold text-sm border-b border-zinc-800 pb-2">
           <ShieldAlert className="w-4 h-4" />
-          <span>3. Instalação Limpa & Manutenção</span>
+          <span>4. Instalação Limpa & Manutenção</span>
         </div>
 
         <p className="text-xs text-zinc-400 leading-relaxed">
@@ -335,11 +368,11 @@ export const BackupView: React.FC<BackupViewProps> = ({ onVoltar }) => {
 
       {/* Modal de Confirmação para Zerar Sistema */}
       {modalZerarAberto && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-zinc-900 border border-red-800/80 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
-            <div className="flex items-start justify-between">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-zinc-900 border border-red-800/80 rounded-2xl max-w-md w-full p-4 sm:p-6 space-y-4 my-auto max-h-[94dvh] overflow-y-auto flex flex-col shadow-2xl">
+            <div className="flex items-start justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-red-950/80 border border-red-800 flex items-center justify-center text-red-400">
+                <div className="w-10 h-10 rounded-xl bg-red-950/80 border border-red-800 flex items-center justify-center text-red-400 shrink-0">
                   <ShieldAlert className="w-6 h-6" />
                 </div>
                 <div>
@@ -349,13 +382,14 @@ export const BackupView: React.FC<BackupViewProps> = ({ onVoltar }) => {
               </div>
               <button
                 onClick={() => setModalZerarAberto(false)}
-                className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition"
+                className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition cursor-pointer"
+                title="Fechar"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs text-zinc-300 leading-relaxed bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+            <div className="space-y-3 text-xs text-zinc-300 leading-relaxed bg-zinc-950 p-3.5 sm:p-4 rounded-xl border border-zinc-800">
               <p>
                 Esta ação apagará <strong className="text-red-400">TODOS</strong> os registros existentes no banco de dados (clientes, veículos, ordens de serviço e dados de teste da oficina).
               </p>
@@ -376,11 +410,11 @@ export const BackupView: React.FC<BackupViewProps> = ({ onVoltar }) => {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setModalZerarAberto(false)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-medium transition"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-300 rounded-lg text-xs font-medium transition cursor-pointer text-center"
               >
                 Cancelar
               </button>
@@ -398,7 +432,7 @@ export const BackupView: React.FC<BackupViewProps> = ({ onVoltar }) => {
                     setCarregando(false);
                   }
                 }}
-                className="px-5 py-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white text-xs font-bold rounded-lg shadow transition disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-5 py-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white text-xs font-bold rounded-lg shadow transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-center"
               >
                 {carregando ? 'Zerando...' : 'Confirmar e Iniciar Instalação'}
               </button>

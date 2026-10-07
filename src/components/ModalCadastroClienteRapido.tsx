@@ -106,23 +106,24 @@ export const ModalCadastroClienteRapido: React.FC<ModalCadastroClienteRapidoProp
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
-      <div className="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-xl w-full p-4 sm:p-6 shadow-2xl relative my-6 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
+      <div className="bg-zinc-900 border border-zinc-700/90 rounded-2xl max-w-xl w-full p-3 sm:p-6 shadow-2xl relative my-auto sm:my-6 flex flex-col max-h-[94dvh] sm:max-h-[90vh]">
         {/* Cabeçalho */}
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400">
-              <User className="w-5 h-5" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
+              <User className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white leading-tight">Cadastrar Novo Cliente</h3>
-              <p className="text-xs text-zinc-400">Cadastro rápido para vinculação imediata à Ordem de Serviço</p>
+              <h3 className="text-base sm:text-lg font-bold text-white leading-tight">Cadastrar Novo Cliente</h3>
+              <p className="text-[11px] sm:text-xs text-zinc-400">Cadastro rápido para vinculação imediata à Ordem de Serviço</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition"
+            className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition cursor-pointer shrink-0"
+            title="Fechar"
           >
             <X className="w-5 h-5" />
           </button>
@@ -334,19 +335,19 @@ export const ModalCadastroClienteRapido: React.FC<ModalCadastroClienteRapidoProp
             </div>
           </div>
 
-          {/* Botões de Ação */}
-          <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-3 shrink-0">
+          {/* Botões de Ação - Sempre Visíveis e Fixos */}
+          <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-2.5 shrink-0 sticky bottom-0 bg-zinc-900/98 backdrop-blur-md z-10">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs sm:text-sm font-semibold transition"
+              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-300 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={salvando}
-              className="px-5 py-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 shadow-lg shadow-red-950 transition disabled:opacity-50"
+              className="px-5 py-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 shadow-lg shadow-red-950 transition disabled:opacity-50 cursor-pointer"
             >
               {salvando ? (
                 <>
@@ -356,7 +357,7 @@ export const ModalCadastroClienteRapido: React.FC<ModalCadastroClienteRapidoProp
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Salvar e Selecionar Cliente</span>
+                  <span>Salvar e Selecionar</span>
                 </>
               )}
             </button>

@@ -226,7 +226,9 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
                     <td className="px-4 py-3.5">
                       <span
                         className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                          u.perfil === 'ADMINISTRADOR'
+                          u.perfil === 'SUPERADMIN'
+                            ? 'bg-purple-950/80 text-purple-300 border border-purple-800/60 font-bold'
+                            : u.perfil === 'ADMINISTRADOR'
                             ? 'bg-red-950/60 text-red-400 border border-red-800/60'
                             : 'bg-amber-950/60 text-amber-400 border border-amber-800/60'
                         }`}
@@ -280,9 +282,9 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
 
       {/* Modal Cadastro/Edição de Usuário */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
-            <div className="flex items-center justify-between pb-4 border-b border-zinc-800 mb-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl relative my-auto sm:my-6 max-h-[94dvh] sm:max-h-[90vh] flex flex-col overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-zinc-800 mb-4 shrink-0">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-red-500" />
                 <h2 className="text-lg font-bold text-white">
@@ -430,7 +432,8 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
                   onChange={(e) => setFormData({ ...formData, perfil: e.target.value as PerfilUsuario })}
                   className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 font-bold"
                 >
-                  <option value="ADMINISTRADOR">ADMINISTRADOR (Acesso total + cancelamento + oficina)</option>
+                  <option value="SUPERADMIN">SUPERADMIN (Dono do SaaS / Gestor da Plataforma Multi-Empresas)</option>
+                  <option value="ADMINISTRADOR">ADMINISTRADOR (Gestor da Oficina)</option>
                   <option value="MECANICO">MECÂNICO (Abertura, edição e execução de OS)</option>
                 </select>
               </div>

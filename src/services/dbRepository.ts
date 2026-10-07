@@ -193,7 +193,21 @@ export const SistemaRepository = {
 };
 
 export const OficinaRepository = {
-  async get(): Promise<OficinaConfig> {
+  async getAll(): Promise<OficinaConfig[]> {
+    const rows = await executeQuery<OficinaConfig>('SELECT * FROM oficina ORDER BY nome ASC');
+    return rows;
+  },
+
+  async getById(id: string): Promise<OficinaConfig | null> {
+    const rows = await executeQuery<OficinaConfig>('SELECT * FROM oficina WHERE id = $1', [id]);
+    return rows[0] || null;
+  },
+
+  async get(oficinaId?: string): Promise<OficinaConfig> {
+    if (oficinaId) {
+      const encontrada = await this.getById(oficinaId);
+      if (encontrada) return encontrada;
+    }
     const rows = await executeQuery<OficinaConfig>('SELECT * FROM oficina LIMIT 1');
     if (!rows.length) {
       return {
@@ -221,34 +235,86 @@ export const OficinaRepository = {
         texto_institucional: 'Seu carro em boas mãos!',
         texto_padrao_garantia: 'Garantia legal de 90 dias para peças e serviços.',
         texto_padrao_condicoes: '• O cliente autoriza a execução dos serviços descritos.',
+        status_empresa: 'ATIVA',
+        plano: 'PRO',
+        limite_os_mensal: 500,
       };
     }
     return rows[0];
   },
 
-  async update(config: Partial<OficinaConfig>): Promise<void> {
-    const current = await this.get();
+  async create(data: Partial<OficinaConfig>): Promise<OficinaConfig> {
+    const id = data.id || 'oficina_' + Date.now();
+    const agora = new Date().toISOString();
+    const nova: OficinaConfig = {
+      id,
+      nome: data.nome || 'Nova Empresa',
+      razao_social: data.razao_social || data.nome || '',
+      nome_fantasia: data.nome_fantasia || data.nome || '',
+      cnpj: data.cnpj || '',
+      telefone: data.telefone || '',
+      whatsapp: data.whatsapp || '',
+      email: data.email || '',
+      cep: data.cep || '',
+      logradouro: data.logradouro || '',
+      numero: data.numero || '',
+      complemento: data.complemento || '',
+      bairro: data.bairro || '',
+      cidade: data.cidade || '',
+      estado: data.estado || '',
+      logo: data.logo || '',
+      banner_cabecalho: data.banner_cabecalho || '',
+      cabecalho_fundo: data.cabecalho_fundo || '',
+      cabecalho_logo: data.cabecalho_logo || '',
+      cabecalho_escritas: data.cabecalho_escritas || '',
+      modo_cabecalho: data.modo_cabecalho || 'composto',
+      texto_institucional: data.texto_institucional || 'Seu carro em boas mãos!',
+      texto_padrao_garantia: data.texto_padrao_garantia || 'Garantia de 90 dias.',
+      texto_padrao_condicoes: data.texto_padrao_condicoes || '• Serviços sob orçamento.',
+      status_empresa: data.status_empresa || 'ATIVA',
+      plano: data.plano || 'PRO',
+      limite_os_mensal: data.limite_os_mensal || 500,
+      data_expiracao: data.data_expiracao || '',
+      responsavel_nome: data.responsavel_nome || '',
+      responsavel_contato: data.responsavel_contato || '',
+      created_at: agora,
+      updated_at: agora,
+    };
+
+    await executeCommand(
+      `INSERT INTO oficina (
+        id, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
+        cep, logradouro, numero, complemento, bairro, cidade, estado, logo,
+        texto_institucional, texto_padrao_garantia, texto_padrao_condicoes,
+        banner_cabecalho, cabecalho_fundo, cabecalho_logo, cabecalho_escritas, modo_cabecalho,
+        status_empresa, plano, limite_os_mensal, data_expiracao, responsavel_nome, responsavel_contato,
+        created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)`,
+      [
+        nova.id, nova.nome, nova.razao_social, nova.nome_fantasia, nova.cnpj,
+        nova.telefone, nova.whatsapp, nova.email, nova.cep, nova.logradouro,
+        nova.numero, nova.complemento, nova.bairro, nova.cidade, nova.estado,
+        nova.logo, nova.texto_institucional, nova.texto_padrao_garantia, nova.texto_padrao_condicoes,
+        nova.banner_cabecalho || null, nova.cabecalho_fundo || null, nova.cabecalho_logo || null,
+        nova.cabecalho_escritas || null, nova.modo_cabecalho || 'composto',
+        nova.status_empresa || 'ATIVA', nova.plano || 'PRO', nova.limite_os_mensal || 500,
+        nova.data_expiracao || null, nova.responsavel_nome || null, nova.responsavel_contato || null,
+        nova.created_at, nova.updated_at
+      ]
+    );
+
+    return nova;
+  },
+
+  async update(config: Partial<OficinaConfig>, targetOficinaId?: string): Promise<void> {
+    const idToUpdate = targetOficinaId || config.id;
+    const current = idToUpdate ? (await this.getById(idToUpdate)) || (await this.get()) : await this.get();
     const updated = { ...current, ...config, updated_at: new Date().toISOString() };
 
-    // Se a oficina ainda não existia na tabela, cria; senão atualiza
-    const check = await executeQuery<{ count: string }>('SELECT count(*) as count FROM oficina');
+    // Se a oficina não existir na tabela, cria
+    const check = await executeQuery<{ count: string }>('SELECT count(*) as count FROM oficina WHERE id = $1', [updated.id]);
     if (parseInt(check[0]?.count || '0', 10) === 0) {
-      await executeCommand(
-        `INSERT INTO oficina (
-          id, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
-          cep, logradouro, numero, complemento, bairro, cidade, estado, logo,
-          texto_institucional, texto_padrao_garantia, texto_padrao_condicoes,
-          banner_cabecalho, cabecalho_fundo, cabecalho_logo, cabecalho_escritas, modo_cabecalho, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
-        [
-          updated.id, updated.nome, updated.razao_social, updated.nome_fantasia, updated.cnpj,
-          updated.telefone, updated.whatsapp, updated.email, updated.cep, updated.logradouro,
-          updated.numero, updated.complemento, updated.bairro, updated.cidade, updated.estado,
-          updated.logo, updated.texto_institucional, updated.texto_padrao_garantia, updated.texto_padrao_condicoes,
-          updated.banner_cabecalho || null, updated.cabecalho_fundo || null, updated.cabecalho_logo || null,
-          updated.cabecalho_escritas || null, updated.modo_cabecalho || 'composto', updated.updated_at
-        ]
-      );
+      await this.create(updated);
       return;
     }
 
@@ -260,8 +326,11 @@ export const OficinaRepository = {
         cidade = $13, estado = $14, logo = $15, texto_institucional = $16,
         texto_padrao_garantia = $17, texto_padrao_condicoes = $18,
         banner_cabecalho = $19, cabecalho_fundo = $20, cabecalho_logo = $21,
-        cabecalho_escritas = $22, modo_cabecalho = $23, updated_at = $24
-       WHERE id = $25`,
+        cabecalho_escritas = $22, modo_cabecalho = $23,
+        status_empresa = $24, plano = $25, limite_os_mensal = $26,
+        data_expiracao = $27, responsavel_nome = $28, responsavel_contato = $29,
+        updated_at = $30
+       WHERE id = $31`,
       [
         updated.nome,
         updated.razao_social,
@@ -286,10 +355,28 @@ export const OficinaRepository = {
         updated.cabecalho_logo || null,
         updated.cabecalho_escritas || null,
         updated.modo_cabecalho || 'composto',
+        updated.status_empresa || 'ATIVA',
+        updated.plano || 'PRO',
+        updated.limite_os_mensal || 500,
+        updated.data_expiracao || null,
+        updated.responsavel_nome || null,
+        updated.responsavel_contato || null,
         updated.updated_at,
-        current.id,
+        updated.id,
       ]
     );
+  },
+
+  async delete(id: string): Promise<void> {
+    const total = await executeQuery<{ count: string }>('SELECT count(*) as count FROM oficina');
+    if (parseInt(total[0]?.count || '0', 10) <= 1) {
+      throw new Error('Não é possível remover a única empresa do sistema.');
+    }
+    // Remove dados dependentes dessa oficina
+    await executeCommand('DELETE FROM ordens_servico WHERE oficina_id = $1', [id]);
+    await executeCommand('DELETE FROM clientes WHERE oficina_id = $1', [id]);
+    await executeCommand('DELETE FROM usuarios WHERE oficina_id = $1', [id]);
+    await executeCommand('DELETE FROM oficina WHERE id = $1', [id]);
   },
 };
 

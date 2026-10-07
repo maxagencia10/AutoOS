@@ -49,9 +49,9 @@ export const VisualizacaoOSModal: React.FC<VisualizacaoOSModalProps> = ({
   onEditar,
   onOSAtualizada,
 }) => {
-  const { usuarioAtual, podeCancelarOS } = useAuth();
+  const { usuarioAtual, podeCancelarOS, oficinaAtiva } = useAuth();
   const [os, setOs] = useState<OrdemServico>(osInicial);
-  const [oficina, setOficina] = useState<OficinaConfig | null>(null);
+  const [oficina, setOficina] = useState<OficinaConfig | null>(oficinaAtiva || null);
   const [historico, setHistorico] = useState<HistoricoStatus[]>([]);
 
   // Modal de Cancelamento (Section 19)
@@ -68,12 +68,13 @@ export const VisualizacaoOSModal: React.FC<VisualizacaoOSModalProps> = ({
 
   useEffect(() => {
     carregarDados();
-  }, [osInicial.id]);
+  }, [osInicial.id, oficinaAtiva?.id]);
 
   const carregarDados = async () => {
     try {
+      const targetOficinaId = osInicial.oficina_id || oficinaAtiva?.id;
       const [ofi, hist, osAtual] = await Promise.all([
-        OficinaRepository.get(),
+        OficinaRepository.get(targetOficinaId),
         OrdemServicoRepository.getHistorico(osInicial.id),
         OrdemServicoRepository.getById(osInicial.id),
       ]);
@@ -266,41 +267,55 @@ export const VisualizacaoOSModal: React.FC<VisualizacaoOSModalProps> = ({
   const badge = getStatusBadgeInfo(os.status);
 
   return (
-    <div className="modal-visualizacao-os fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-5xl w-full p-4 sm:p-6 shadow-2xl relative my-6 max-h-[96vh] flex flex-col print:border-none print:shadow-none print:p-0 print:bg-white print:max-h-none print:w-full print:max-w-none print:rounded-none print:static">
+    <div className="modal-visualizacao-os fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-1.5 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-5xl w-full p-3 sm:p-6 shadow-2xl relative my-auto sm:my-6 max-h-[96dvh] sm:max-h-[96vh] flex flex-col print:border-none print:shadow-none print:p-0 print:bg-white print:max-h-none print:w-full print:max-w-none print:rounded-none print:static">
         
         {/* Barra Superior de Ações (Oculta na Impressão) */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 border-b border-zinc-800 shrink-0 no-print">
-          <div className="flex items-center gap-3">
-            <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${badge.bg} ${badge.text} border ${badge.border}`}
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5 sm:gap-3 pb-3 border-b border-zinc-800 shrink-0 no-print">
+          <div className="flex items-center justify-between w-full lg:w-auto gap-2">
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${badge.bg} ${badge.text} border ${badge.border}`}
+              >
+                <span className={`w-2 h-2 rounded-full ${badge.dot}`} />
+                {os.status}
+              </span>
+              <span className="text-zinc-300 text-xs font-mono font-bold sm:inline">
+                {os.numero_formatado}
+              </span>
+              <span className="text-zinc-500 text-xs hidden sm:inline">
+                • {formatDate(os.data)}
+              </span>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="lg:hidden p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition cursor-pointer"
+              title="Fechar Visualização"
             >
-              <span className={`w-2 h-2 rounded-full ${badge.dot}`} />
-              {os.status}
-            </span>
-            <span className="text-zinc-400 text-xs hidden sm:inline">
-              Criada em {formatDate(os.data)} às {os.hora} por {os.usuario_responsavel_nome}
-            </span>
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+          {/* Botões de Ação Totalmente Ajustáveis em Todas as Telas */}
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full lg:w-auto justify-start lg:justify-end">
             <button
               onClick={handleBaixarPDFDireto}
               id="btn-baixar-pdf-os"
               title="Gerar e Baixar Documento Oficial em PDF no computador"
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-200 hover:text-white rounded-lg text-xs font-bold shadow-md transition border border-zinc-700 cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-2.5 py-2 sm:py-1.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-200 hover:text-white rounded-lg text-xs font-bold shadow-sm transition border border-zinc-700 cursor-pointer min-w-[70px]"
             >
-              <Download className="w-4 h-4 text-amber-400" />
-              <span>Baixar PDF</span>
+              <Download className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>PDF</span>
             </button>
 
             <button
               onClick={handlePrint}
               id="btn-imprimir-os"
               title="Imprimir Ordem de Serviço Oficial A4"
-              className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white rounded-lg text-xs font-bold shadow-md shadow-red-950 transition border border-red-500 cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-3 py-2 sm:py-1.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white rounded-lg text-xs font-bold shadow-md shadow-red-950 transition border border-red-500 cursor-pointer min-w-[75px]"
             >
-              <Printer className="w-4 h-4" />
+              <Printer className="w-3.5 h-3.5 shrink-0" />
               <span>Imprimir</span>
             </button>
 
@@ -308,30 +323,30 @@ export const VisualizacaoOSModal: React.FC<VisualizacaoOSModalProps> = ({
               onClick={() => setModalWhatsAppAberto(true)}
               id="btn-whatsapp-os"
               title="Enviar Ordem de Serviço via WhatsApp com anexo do PDF oficial"
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-md shadow-emerald-950 transition border border-emerald-500 cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-3 py-2 sm:py-1.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-md shadow-emerald-950 transition border border-emerald-500 cursor-pointer min-w-[90px]"
             >
-              <MessageSquare className="w-4 h-4" />
-              <span>Enviar WhatsApp (com PDF)</span>
+              <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+              <span>WhatsApp</span>
             </button>
 
             {os.status !== 'CANCELADA' && (
               <button
                 onClick={() => onEditar(os)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-medium transition border border-zinc-700"
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1 px-2.5 py-2 sm:py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-medium transition border border-zinc-700 cursor-pointer min-w-[65px]"
               >
-                <Edit2 className="w-3.5 h-3.5 text-zinc-400" />
+                <Edit2 className="w-3 h-3 text-zinc-400 shrink-0" />
                 <span>Editar</span>
               </button>
             )}
 
             {/* Dropdown de Fluxo de Status */}
-            <div className="flex items-center gap-1 bg-zinc-950 px-2 py-1 rounded-lg border border-zinc-800">
-              <span className="text-[11px] text-zinc-400">Status:</span>
+            <div className="flex-1 sm:flex-none flex items-center justify-between sm:justify-start gap-1 bg-zinc-950 px-2 py-1.5 sm:py-1 rounded-lg border border-zinc-800 min-w-[130px]">
+              <span className="text-[10px] text-zinc-400 uppercase font-mono shrink-0">Status:</span>
               <select
                 disabled={alterandoStatus}
                 value={os.status}
                 onChange={(e) => handleMudarStatus(e.target.value as StatusOS)}
-                className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer"
+                className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer w-full truncate"
               >
                 <option value="ABERTA" className="bg-zinc-900">ABERTA</option>
                 <option value="AGUARDANDO APROVAÇÃO" className="bg-zinc-900">AGUARDANDO APROVAÇÃO</option>
@@ -345,7 +360,8 @@ export const VisualizacaoOSModal: React.FC<VisualizacaoOSModalProps> = ({
 
             <button
               onClick={onClose}
-              className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition ml-1"
+              className="hidden lg:flex p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition ml-1 cursor-pointer"
+              title="Fechar Visualização"
             >
               <X className="w-5 h-5" />
             </button>
@@ -369,7 +385,11 @@ export const VisualizacaoOSModal: React.FC<VisualizacaoOSModalProps> = ({
         {/* DOCUMENTO OFICIAL A4 PARA VISUALIZAÇÃO E IMPRESSÃO                       */}
         {/* Layout idêntico ao modelo Impérios Car (Preto, Vermelho e Branco)         */}
         {/* ========================================================================= */}
-        <div className="overflow-y-auto flex-1 p-2 sm:p-4 print:p-0 bg-zinc-950/60 print:bg-white rounded-xl print:rounded-none shadow-xl print:shadow-none print:overflow-visible">
+        <div className="overflow-y-auto overflow-x-auto flex-1 p-1 sm:p-4 print:p-0 bg-zinc-950/60 print:bg-white rounded-xl print:rounded-none shadow-xl print:shadow-none print:overflow-visible touch-pan-x">
+          <div className="sm:hidden text-[10px] text-zinc-400 bg-zinc-900/90 px-2 py-1 rounded border border-zinc-800 mb-2 flex items-center justify-between no-print">
+            <span>↔️ Arraste para os lados para navegar pelo A4</span>
+            <span className="text-zinc-500 font-mono">100% Legível</span>
+          </div>
           <DocumentoOSImpressao os={os} oficina={oficina} />
         </div>
 

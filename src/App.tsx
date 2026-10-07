@@ -10,6 +10,7 @@ import { ConfiguracoesView } from './components/ConfiguracoesView';
 import { UsuariosView } from './components/UsuariosView';
 import { BackupView } from './components/BackupView';
 import { AtualizacoesView } from './components/AtualizacoesView';
+import { SaasEmpresasView } from './components/SaasEmpresasView';
 import { NovaOrdemServicoModal } from './components/NovaOrdemServicoModal';
 import { VisualizacaoOSModal } from './components/VisualizacaoOSModal';
 import { InstalacaoWizard } from './components/InstalacaoWizard';
@@ -154,6 +155,10 @@ function MainApp() {
             onIrParaAtualizacoes={() => setCurrentTab('atualizacoes')}
             onVoltar={() => setCurrentTab('dashboard')}
           />
+        )}
+
+        {currentTab === 'empresas' && (
+          <SaasEmpresasView />
         )}
 
         {currentTab === 'usuarios' && (

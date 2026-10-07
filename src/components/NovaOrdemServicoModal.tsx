@@ -52,7 +52,7 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const { usuarioAtual } = useAuth();
+  const { usuarioAtual, oficinaAtiva } = useAuth();
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [veiculosDisponiveis, setVeiculosDisponiveis] = useState<Veiculo[]>([]);
@@ -343,6 +343,7 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
     setSalvando(true);
     try {
       const osPayload = {
+        oficina_id: oficinaAtiva?.id || 'oficina_matriz',
         numero: numeroSequencial,
         numero_formatado: numeroFormatado,
         data,
@@ -399,34 +400,35 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-5xl w-full p-4 sm:p-6 shadow-2xl relative my-6 max-h-[95vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-1.5 sm:p-4 overflow-y-auto">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-5xl w-full p-3 sm:p-6 shadow-2xl relative my-auto sm:my-6 max-h-[96dvh] sm:max-h-[94vh] flex flex-col">
         
         {/* Cabeçalho do Modal */}
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-800 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-red-600/20 border border-red-500/30 flex items-center justify-center text-red-400">
-              <FileText className="w-5 h-5" />
+        <div className="flex items-start sm:items-center justify-between gap-2 pb-3 border-b border-zinc-800 shrink-0">
+          <div className="flex items-start sm:items-center gap-2.5 sm:gap-3">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-red-600/20 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0 mt-0.5 sm:mt-0">
+              <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-xl font-bold text-white tracking-tight">
                   {osParaEditar ? 'Editar Ordem de Serviço' : 'Abertura de Ordem de Serviço'}
                 </h2>
-                <span className="px-2.5 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-red-400 font-mono font-bold text-xs sm:text-sm">
+                <span className="px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-red-400 font-mono font-bold text-xs sm:text-sm">
                   {numeroFormatado}
                 </span>
               </div>
-              <p className="text-xs text-zinc-400">
-                Preencha os dados do cliente, veículo, diagnóstico técnico e itens para cálculo automático.
+              <p className="text-[11px] sm:text-xs text-zinc-400">
+                Preencha os dados do cliente, veículo, diagnóstico e itens com cálculo automático.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition"
+            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition shrink-0 cursor-pointer"
+            title="Fechar"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
         </div>
 
@@ -788,7 +790,95 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
               </button>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Visualização de Itens da OS em Cards para Dispositivos Móveis */}
+            <div className="md:hidden space-y-3">
+              {itens.map((it, idx) => (
+                <div key={it.id || idx} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase font-mono">
+                        #{idx + 1}
+                      </span>
+                      <select
+                        value={it.tipo}
+                        onChange={(e) => updateItem(idx, 'tipo', e.target.value)}
+                        className="px-2 py-1 bg-zinc-950 border border-zinc-700 rounded text-zinc-200 text-xs font-semibold focus:outline-none focus:border-red-500"
+                      >
+                        <option value="SERVICO">Serviço</option>
+                        <option value="PECA">Peça</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-bold text-emerald-400">
+                        {formatCurrency(Number(it.quantidade) * Number(it.valor_unitario))}
+                      </span>
+                      {itens.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeItem(idx)}
+                          className="p-1.5 text-zinc-400 hover:text-red-400 active:text-red-300 hover:bg-zinc-800 rounded-lg transition"
+                          title="Remover Item"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-zinc-400 mb-1">Descrição</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: Troca de pastilhas de freio..."
+                      value={it.descricao}
+                      onChange={(e) => updateItem(idx, 'descricao', e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-100 text-xs focus:outline-none focus:border-red-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Quantidade</label>
+                      <input
+                        type="number"
+                        step="any"
+                        min={0.1}
+                        required
+                        value={it.quantidade}
+                        onChange={(e) => updateItem(idx, 'quantidade', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-100 text-xs text-center font-mono focus:outline-none focus:border-red-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Valor Unitário (R$)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        required
+                        value={it.valor_unitario}
+                        onChange={(e) => updateItem(idx, 'valor_unitario', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-100 text-xs text-right font-mono focus:outline-none focus:border-red-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={addItem}
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-dashed border-zinc-700 hover:border-red-500 text-zinc-300 hover:text-white rounded-xl text-xs font-semibold transition"
+              >
+                <Plus className="w-3.5 h-3.5 text-red-400" />
+                <span>+ Adicionar Outro Item à OS</span>
+              </button>
+            </div>
+
+            {/* Visualização de Itens da OS em Tabela para Tablets e Computadores */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-zinc-900 text-zinc-400 uppercase text-[10px] font-bold border-b border-zinc-800">
                   <tr>
@@ -852,7 +942,7 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
                         <button
                           type="button"
                           onClick={() => removeItem(idx)}
-                          className="text-zinc-500 hover:text-red-400 p-1 transition"
+                          className="text-zinc-500 hover:text-red-400 p-1 transition cursor-pointer"
                           title="Remover Item"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -953,12 +1043,12 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
             </div>
           </div>
 
-          {/* Rodapé e Ações Responsivas */}
-          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:gap-3 pt-4 border-t border-zinc-800 shrink-0 sticky bottom-0 bg-zinc-900/95 backdrop-blur-sm -mx-4 -mb-4 sm:-mx-6 sm:-mb-6 p-4 sm:p-6 rounded-b-2xl">
+          {/* Rodapé e Ações Responsivas - Fixo e Sempre Visível */}
+          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 pt-3 border-t border-zinc-800 shrink-0 sticky bottom-0 bg-zinc-900/98 backdrop-blur-md -mx-3 -mb-3 sm:-mx-6 sm:-mb-6 p-3 sm:p-5 rounded-b-2xl shadow-2xl z-20">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 rounded-lg font-medium transition text-center"
+              className="px-4 py-2.5 text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 rounded-lg font-medium transition text-center cursor-pointer text-xs sm:text-sm"
             >
               Cancelar
             </button>
@@ -966,7 +1056,7 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
               type="submit"
               disabled={salvando}
               id="btn-salvar-os"
-              className="px-6 py-2.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-semibold rounded-lg shadow-lg shadow-red-950 transition border border-red-500 disabled:opacity-50 flex items-center justify-center gap-2"
+              className="px-6 py-2.5 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-semibold rounded-lg shadow-lg shadow-red-950 transition border border-red-500 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer text-xs sm:text-sm"
             >
               <CheckCircle className="w-4 h-4 shrink-0" />
               <span>{salvando ? 'Salvando Ordem de Serviço...' : osParaEditar ? 'Atualizar Ordem de Serviço' : 'Salvar e Emitir OS'}</span>
