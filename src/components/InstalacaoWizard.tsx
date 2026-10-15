@@ -734,7 +734,7 @@ export const InstalacaoWizard: React.FC<InstalacaoWizardProps> = ({ onInstalacao
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4" />
-                    <span>Concluir Instalação e Acessar Sistema</span>
+                    <span>Concluir Cadastro e Ir para Login</span>
                   </>
                 )}
               </button>

@@ -1,4 +1,4 @@
-import { executeQuery, executeCommand, wipeDatabaseClean, resetDatabase } from '../db/pgEngine';
+import { executeQuery, executeCommand, wipeDatabaseClean, resetDatabase, getPgEngine } from '../db/pgEngine';
 import {
   OficinaConfig,
   Usuario,
@@ -22,14 +22,16 @@ export const SistemaRepository = {
     try {
       const [oficinaRows, adminRows] = await Promise.all([
         executeQuery<{ count: string }>('SELECT count(*) as count FROM oficina'),
-        executeQuery<{ count: string }>("SELECT count(*) as count FROM usuarios WHERE perfil = 'ADMINISTRADOR' AND ativo = TRUE"),
+        executeQuery<{ count: string }>(
+          "SELECT count(*) as count FROM usuarios WHERE ativo = TRUE AND perfil IN ('ADMINISTRADOR', 'SUPERADMIN')"
+        ),
       ]);
       const temOficina = parseInt(oficinaRows[0]?.count || '0', 10) > 0;
       const temAdmin = parseInt(adminRows[0]?.count || '0', 10) > 0;
       return temOficina && temAdmin;
     } catch (e) {
       console.warn('Erro ao verificar instalação:', e);
-      return false;
+      return true;
     }
   },
 
@@ -141,7 +143,7 @@ export const SistemaRepository = {
       ]
     );
 
-    // 3. Insere o Administrador
+    // 3. Insere o Administrador Geral da Plataforma (SUPERADMIN)
     const adminId = 'admin_' + Date.now();
     await executeCommand(
       `INSERT INTO usuarios (id, oficina_id, nome, email, senha, perfil, ativo, created_at, updated_at)
@@ -152,7 +154,7 @@ export const SistemaRepository = {
         dados.admin.nome.trim(),
         dados.admin.email.trim().toLowerCase(),
         dados.admin.senha || 'admin',
-        'ADMINISTRADOR',
+        'SUPERADMIN',
         true,
         agora,
         agora,
@@ -164,7 +166,7 @@ export const SistemaRepository = {
       oficina_id: oficinaId,
       nome: dados.admin.nome.trim(),
       email: dados.admin.email.trim().toLowerCase(),
-      perfil: 'ADMINISTRADOR',
+      perfil: 'SUPERADMIN',
       ativo: true,
       created_at: agora,
       updated_at: agora,
@@ -306,6 +308,23 @@ export const OficinaRepository = {
     return nova;
   },
 
+  async createWithAdmin(
+    oficinaData: Partial<OficinaConfig>,
+    adminData: { nome: string; email: string; senha?: string; telefone?: string }
+  ): Promise<{ oficina: OficinaConfig; adminUser: Usuario }> {
+    const oficina = await this.create(oficinaData);
+    const adminUser = await UsuarioRepository.create({
+      oficina_id: oficina.id,
+      nome: adminData.nome.trim() || 'Administrador',
+      email: adminData.email.trim().toLowerCase(),
+      senha: adminData.senha || 'auto123',
+      telefone: adminData.telefone || oficina.whatsapp || '',
+      perfil: 'ADMINISTRADOR',
+      ativo: true,
+    });
+    return { oficina, adminUser };
+  },
+
   async update(config: Partial<OficinaConfig>, targetOficinaId?: string): Promise<void> {
     const idToUpdate = targetOficinaId || config.id;
     const current = idToUpdate ? (await this.getById(idToUpdate)) || (await this.get()) : await this.get();
@@ -382,20 +401,110 @@ export const OficinaRepository = {
 
 export const UsuarioRepository = {
   async getAll(): Promise<Usuario[]> {
-    return executeQuery<Usuario>('SELECT id, oficina_id, nome, email, perfil, ativo, created_at FROM usuarios ORDER BY nome ASC');
+    try {
+      return await executeQuery<Usuario>(
+        'SELECT id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro, cidade, estado, perfil, ativo, created_at FROM usuarios ORDER BY nome ASC'
+      );
+    } catch (err: any) {
+      if (err?.message?.includes('column') || err?.message?.includes('telefone')) {
+        try {
+          const db = await getPgEngine();
+          await db.exec(`
+            ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefone VARCHAR(30);
+            ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cep VARCHAR(10);
+            ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS logradouro VARCHAR(255);
+            ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS numero VARCHAR(30);
+            ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS bairro VARCHAR(100);
+            ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cidade VARCHAR(100);
+            ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS estado VARCHAR(2);
+            ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS senha VARCHAR(255) DEFAULT '123';
+          `);
+          return await executeQuery<Usuario>(
+            'SELECT id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro, cidade, estado, perfil, ativo, created_at FROM usuarios ORDER BY nome ASC'
+          );
+        } catch {
+          const rows = await executeQuery<any>(
+            'SELECT id, oficina_id, nome, email, perfil, ativo, created_at FROM usuarios ORDER BY nome ASC'
+          );
+          return rows.map((u) => ({
+            ...u,
+            telefone: '',
+            cep: '',
+            logradouro: '',
+            numero: '',
+            bairro: '',
+            cidade: '',
+            estado: '',
+            senha: '',
+          }));
+        }
+      }
+      throw err;
+    }
   },
 
   async getById(id: string): Promise<Usuario | null> {
-    const rows = await executeQuery<Usuario>('SELECT id, oficina_id, nome, email, perfil, ativo, created_at FROM usuarios WHERE id = $1', [id]);
-    return rows[0] || null;
+    try {
+      const rows = await executeQuery<Usuario>(
+        'SELECT id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro, cidade, estado, perfil, ativo, created_at FROM usuarios WHERE id = $1',
+        [id]
+      );
+      return rows[0] || null;
+    } catch {
+      const rows = await executeQuery<any>(
+        'SELECT id, oficina_id, nome, email, perfil, ativo, created_at FROM usuarios WHERE id = $1',
+        [id]
+      );
+      if (!rows[0]) return null;
+      return {
+        ...rows[0],
+        telefone: '',
+        cep: '',
+        logradouro: '',
+        numero: '',
+        bairro: '',
+        cidade: '',
+        estado: '',
+        senha: '',
+      };
+    }
+  },
+
+  async getByOficina(oficinaId: string): Promise<Usuario[]> {
+    try {
+      return await executeQuery<Usuario>(
+        'SELECT id, oficina_id, nome, email, senha, telefone, perfil, ativo, created_at FROM usuarios WHERE oficina_id = $1 ORDER BY perfil ASC, nome ASC',
+        [oficinaId]
+      );
+    } catch {
+      return await executeQuery<any>(
+        'SELECT id, oficina_id, nome, email, perfil, ativo, created_at FROM usuarios WHERE oficina_id = $1 ORDER BY perfil ASC, nome ASC',
+        [oficinaId]
+      );
+    }
   },
 
   async create(user: Omit<Usuario, 'id'>): Promise<Usuario> {
     const id = 'user_' + Date.now();
     await executeCommand(
-      `INSERT INTO usuarios (id, oficina_id, nome, email, senha, perfil, ativo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [id, user.oficina_id || 'oficina_matriz', user.nome, user.email, user.senha || '123', user.perfil, user.ativo ?? true]
+      `INSERT INTO usuarios (id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro, cidade, estado, perfil, ativo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+      [
+        id,
+        user.oficina_id || 'oficina_matriz',
+        user.nome,
+        user.email,
+        user.senha || '123',
+        user.telefone || '',
+        user.cep || '',
+        user.logradouro || '',
+        user.numero || '',
+        user.bairro || '',
+        user.cidade || '',
+        user.estado || '',
+        user.perfil,
+        user.ativo ?? true
+      ]
     );
     return (await this.getById(id))!;
   },
@@ -409,6 +518,10 @@ export const UsuarioRepository = {
       fields.push(`nome = $${idx++}`);
       values.push(user.nome);
     }
+    if (user.oficina_id !== undefined) {
+      fields.push(`oficina_id = $${idx++}`);
+      values.push(user.oficina_id);
+    }
     if (user.email !== undefined) {
       fields.push(`email = $${idx++}`);
       values.push(user.email);
@@ -416,6 +529,34 @@ export const UsuarioRepository = {
     if (user.senha) {
       fields.push(`senha = $${idx++}`);
       values.push(user.senha);
+    }
+    if (user.telefone !== undefined) {
+      fields.push(`telefone = $${idx++}`);
+      values.push(user.telefone);
+    }
+    if (user.cep !== undefined) {
+      fields.push(`cep = $${idx++}`);
+      values.push(user.cep);
+    }
+    if (user.logradouro !== undefined) {
+      fields.push(`logradouro = $${idx++}`);
+      values.push(user.logradouro);
+    }
+    if (user.numero !== undefined) {
+      fields.push(`numero = $${idx++}`);
+      values.push(user.numero);
+    }
+    if (user.bairro !== undefined) {
+      fields.push(`bairro = $${idx++}`);
+      values.push(user.bairro);
+    }
+    if (user.cidade !== undefined) {
+      fields.push(`cidade = $${idx++}`);
+      values.push(user.cidade);
+    }
+    if (user.estado !== undefined) {
+      fields.push(`estado = $${idx++}`);
+      values.push(user.estado);
     }
     if (user.perfil !== undefined) {
       fields.push(`perfil = $${idx++}`);
@@ -430,6 +571,10 @@ export const UsuarioRepository = {
       values.push(id);
       await executeCommand(`UPDATE usuarios SET ${fields.join(', ')} WHERE id = $${idx}`, values);
     }
+  },
+
+  async promoverParaSuperAdmin(id: string): Promise<void> {
+    await executeCommand("UPDATE usuarios SET perfil = 'SUPERADMIN' WHERE id = $1", [id]);
   },
 
   async delete(id: string): Promise<void> {

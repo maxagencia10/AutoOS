@@ -19,8 +19,16 @@ import {
   Phone,
   Mail,
   MapPin,
+  Key,
+  Copy,
+  Check,
+  Share2,
+  Send,
+  Lock,
+  RefreshCw,
+  X,
 } from 'lucide-react';
-import { OficinaConfig, PlanoSaaS, StatusEmpresa } from '../types';
+import { OficinaConfig, PlanoSaaS, StatusEmpresa, Usuario } from '../types';
 import { OficinaRepository, OrdemServicoRepository, UsuarioRepository } from '../services/dbRepository';
 import { useAuth } from '../context/AuthContext';
 
@@ -32,7 +40,18 @@ export const SaasEmpresasView: React.FC = () => {
   const [empresaEdicao, setEmpresaEdicao] = useState<OficinaConfig | null>(null);
   const [salvando, setSalvando] = useState(false);
 
-  // Formulário
+  // Modal de Acesso / Envio de Credenciais
+  const [modalAcessoAberta, setModalAcessoAberta] = useState(false);
+  const [empresaAcesso, setEmpresaAcesso] = useState<OficinaConfig | null>(null);
+  const [adminAcesso, setAdminAcesso] = useState<Usuario | null>(null);
+  const [carregandoAcesso, setCarregandoAcesso] = useState(false);
+  const [copiadoLink, setCopiadoLink] = useState(false);
+  const [copiadoMsg, setCopiadoMsg] = useState(false);
+  const [novaSenhaInput, setNovaSenhaInput] = useState('');
+  const [editandoSenha, setEditandoSenha] = useState(false);
+  const [salvandoSenha, setSalvandoSenha] = useState(false);
+
+  // Formulário da Empresa
   const [nome, setNome] = useState('');
   const [razaoSocial, setRazaoSocial] = useState('');
   const [cnpj, setCnpj] = useState('');
@@ -46,6 +65,11 @@ export const SaasEmpresasView: React.FC = () => {
   const [limiteOS, setLimiteOS] = useState<number>(500);
   const [responsavelNome, setResponsavelNome] = useState('');
   const [responsavelContato, setResponsavelContato] = useState('');
+
+  // Formulário do Administrador Inicial (para novas oficinas)
+  const [adminNome, setAdminNome] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminSenha, setAdminSenha] = useState('');
 
   useEffect(() => {
     carregar();
@@ -71,6 +95,10 @@ export const SaasEmpresasView: React.FC = () => {
     setLimiteOS(500);
     setResponsavelNome('');
     setResponsavelContato('');
+    // Dados de acesso inicial
+    setAdminNome('');
+    setAdminEmail('');
+    setAdminSenha('auto' + Math.floor(100 + Math.random() * 900));
     setModalAberta(true);
   };
 
@@ -90,6 +118,107 @@ export const SaasEmpresasView: React.FC = () => {
     setResponsavelNome(emp.responsavel_nome || '');
     setResponsavelContato(emp.responsavel_contato || '');
     setModalAberta(true);
+  };
+
+  const abrirModalAcesso = async (emp: OficinaConfig, usuarioPredefinido?: Usuario | null) => {
+    setEmpresaAcesso(emp);
+    setCarregandoAcesso(true);
+    setModalAcessoAberta(true);
+    setCopiadoLink(false);
+    setCopiadoMsg(false);
+    setEditandoSenha(false);
+    setNovaSenhaInput('');
+    try {
+      if (usuarioPredefinido) {
+        setAdminAcesso(usuarioPredefinido);
+      } else {
+        const users = await UsuarioRepository.getByOficina(emp.id);
+        const admin = users.find(u => u.perfil === 'ADMINISTRADOR') || users[0] || null;
+        if (!admin) {
+          const novo = await UsuarioRepository.create({
+            oficina_id: emp.id,
+            nome: emp.responsavel_nome || emp.nome,
+            email: emp.email || `admin@${emp.id}.com`,
+            senha: 'auto' + Math.floor(100 + Math.random() * 900),
+            telefone: emp.responsavel_contato || emp.whatsapp || '',
+            perfil: 'ADMINISTRADOR',
+            ativo: true,
+          });
+          setAdminAcesso(novo);
+        } else {
+          setAdminAcesso(admin);
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao carregar acesso:', e);
+    } finally {
+      setCarregandoAcesso(false);
+    }
+  };
+
+  const montarTextoWhatsApp = (emp: OficinaConfig, user: Usuario | null, senhaCustom?: string) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app';
+    const link = `${origin}/?oficina=${emp.id}`;
+    const senhaUsar = senhaCustom || user?.senha || 'auto123';
+    const emailUsar = user?.email || emp.email || 'Não configurado';
+    const resp = emp.responsavel_nome ? `Olá, *${emp.responsavel_nome}*!` : 'Olá!';
+
+    return (
+      `🚗🔧 *ACESSO LIBERADO - AUTOOS OFICINAS*\n\n` +
+      `${resp} O sistema de gestão e Ordem de Serviço da sua oficina *${emp.nome}* já está liberado e ativo no Plano *${emp.plano || 'PRO'}*!\n\n` +
+      `🌐 *Link de Acesso Direto:*\n${link}\n\n` +
+      `👤 *Seu E-mail / Usuário:* ${emailUsar}\n` +
+      `🔑 *Sua Senha:* ${senhaUsar}\n\n` +
+      `📋 *Como usar:*\n` +
+      `1. Abra o link acima no seu celular ou computador.\n` +
+      `2. O sistema abrirá diretamente o painel exclusivo da sua oficina.\n` +
+      `3. Você já pode cadastrar clientes, veículos e emitir Ordens de Serviço completas com impressão A4 e envio no WhatsApp!\n\n` +
+      `Qualquer dúvida estamos à disposição!`
+    );
+  };
+
+  const handleCopiarLink = (empId: string) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app';
+    const link = `${origin}/?oficina=${empId}`;
+    navigator.clipboard.writeText(link);
+    setCopiadoLink(true);
+    setTimeout(() => setCopiadoLink(false), 2500);
+  };
+
+  const handleCopiarMensagemCompleta = () => {
+    if (!empresaAcesso) return;
+    const msg = montarTextoWhatsApp(empresaAcesso, adminAcesso, novaSenhaInput || undefined);
+    navigator.clipboard.writeText(msg);
+    setCopiadoMsg(true);
+    setTimeout(() => setCopiadoMsg(false), 2500);
+  };
+
+  const handleEnviarWhatsApp = () => {
+    if (!empresaAcesso) return;
+    const msg = montarTextoWhatsApp(empresaAcesso, adminAcesso, novaSenhaInput || undefined);
+    let tel = (empresaAcesso.whatsapp || empresaAcesso.responsavel_contato || '').replace(/\D/g, '');
+    if (tel && !tel.startsWith('55') && tel.length <= 11) {
+      tel = '55' + tel;
+    }
+    const url = tel
+      ? `https://api.whatsapp.com/send?phone=${tel}&text=${encodeURIComponent(msg)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleSalvarNovaSenha = async () => {
+    if (!adminAcesso || !novaSenhaInput.trim()) return;
+    setSalvandoSenha(true);
+    try {
+      await UsuarioRepository.update(adminAcesso.id, { senha: novaSenhaInput.trim() });
+      setAdminAcesso({ ...adminAcesso, senha: novaSenhaInput.trim() });
+      setEditandoSenha(false);
+      alert('Senha atualizada com sucesso! Você já pode enviar o novo acesso via WhatsApp.');
+    } catch (e: any) {
+      alert(e.message || 'Erro ao atualizar senha.');
+    } finally {
+      setSalvandoSenha(false);
+    }
   };
 
   const handleSalvar = async (e: React.FormEvent) => {
@@ -120,27 +249,40 @@ export const SaasEmpresasView: React.FC = () => {
           },
           empresaEdicao.id
         );
+        await recarregarOficinas();
+        await carregar();
+        setModalAberta(false);
       } else {
-        await OficinaRepository.create({
-          nome: nome.trim(),
-          razao_social: razaoSocial.trim() || nome.trim(),
-          nome_fantasia: nome.trim(),
-          cnpj: cnpj.trim(),
-          telefone: telefone.trim(),
-          whatsapp: whatsapp.trim(),
-          email: email.trim().toLowerCase(),
-          cidade: cidade.trim(),
-          estado: estado.trim(),
-          plano,
-          status_empresa: statusEmpresa,
-          limite_os_mensal: Number(limiteOS),
-          responsavel_nome: responsavelNome.trim(),
-          responsavel_contato: responsavelContato.trim(),
-        });
+        const { oficina: novaOficina, adminUser } = await OficinaRepository.createWithAdmin(
+          {
+            nome: nome.trim(),
+            razao_social: razaoSocial.trim() || nome.trim(),
+            nome_fantasia: nome.trim(),
+            cnpj: cnpj.trim(),
+            telefone: telefone.trim(),
+            whatsapp: whatsapp.trim(),
+            email: email.trim().toLowerCase(),
+            cidade: cidade.trim(),
+            estado: estado.trim(),
+            plano,
+            status_empresa: statusEmpresa,
+            limite_os_mensal: Number(limiteOS),
+            responsavel_nome: responsavelNome.trim(),
+            responsavel_contato: responsavelContato.trim(),
+          },
+          {
+            nome: adminNome.trim() || responsavelNome.trim() || nome.trim(),
+            email: adminEmail.trim().toLowerCase() || email.trim().toLowerCase() || `admin@${Date.now()}.com`,
+            senha: adminSenha.trim() || 'auto123',
+            telefone: responsavelContato.trim() || whatsapp.trim(),
+          }
+        );
+        await recarregarOficinas();
+        await carregar();
+        setModalAberta(false);
+        // Abre imediatamente o modal para enviar o acesso ao cliente!
+        abrirModalAcesso(novaOficina, adminUser);
       }
-      await recarregarOficinas();
-      await carregar();
-      setModalAberta(false);
     } catch (err: any) {
       alert(err.message || 'Erro ao salvar empresa.');
     } finally {
@@ -328,6 +470,15 @@ export const SaasEmpresasView: React.FC = () => {
                 </button>
 
                 <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => abrirModalAcesso(emp)}
+                    title="Enviar Acesso via WhatsApp / Copiar Link e Credenciais"
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-950/80 hover:bg-emerald-900 active:bg-emerald-800 text-emerald-400 hover:text-emerald-300 rounded-lg transition border border-emerald-800/80 text-xs font-bold cursor-pointer"
+                  >
+                    <Key className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Acesso</span>
+                  </button>
+
                   <button
                     onClick={() => abrirEditar(emp)}
                     title="Editar Dados da Empresa e Plano"
@@ -525,6 +676,70 @@ export const SaasEmpresasView: React.FC = () => {
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:border-red-500 focus:outline-none"
                   />
                 </div>
+
+                {/* Seção de Credenciais de Acesso (apenas ao cadastrar nova oficina) */}
+                {!empresaEdicao && (
+                  <div className="sm:col-span-2 p-3.5 rounded-xl bg-zinc-950/80 border border-red-500/30 space-y-3 mt-2">
+                    <div className="flex items-center gap-2">
+                      <Key className="w-4 h-4 text-red-400" />
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">
+                        Acesso do Administrador desta Oficina
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-tight">
+                      O sistema criará automaticamente o usuário administrador e gerará a mensagem com o link para envio no WhatsApp.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-300 mb-1">
+                          Nome do Administrador
+                        </label>
+                        <input
+                          type="text"
+                          placeholder={responsavelNome || 'Ex: João da Silva'}
+                          value={adminNome}
+                          onChange={(e) => setAdminNome(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-red-500 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-300 mb-1">
+                          E-mail de Login *
+                        </label>
+                        <input
+                          type="email"
+                          required={!empresaEdicao}
+                          placeholder={email || 'login@oficina.com.br'}
+                          value={adminEmail}
+                          onChange={(e) => setAdminEmail(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-red-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[11px] font-semibold text-zinc-300">
+                            Senha de Acesso Inicial *
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setAdminSenha('auto' + Math.floor(100 + Math.random() * 900))}
+                            className="text-[10px] text-red-400 hover:text-red-300 cursor-pointer flex items-center gap-1 font-mono"
+                          >
+                            <RefreshCw className="w-3 h-3" /> Gerar Nova Senha
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          required={!empresaEdicao}
+                          placeholder="Senha..."
+                          value={adminSenha}
+                          onChange={(e) => setAdminSenha(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono font-bold focus:border-red-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800 sticky bottom-0 bg-zinc-900/98 backdrop-blur-md z-10">
@@ -540,10 +755,175 @@ export const SaasEmpresasView: React.FC = () => {
                   disabled={salvando}
                   className="px-5 py-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-red-950 disabled:opacity-50 cursor-pointer"
                 >
-                  {salvando ? 'Salvando...' : 'Salvar Empresa'}
+                  {salvando ? 'Salvando...' : empresaEdicao ? 'Salvar Empresa' : 'Salvar e Gerar Acesso'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Compartilhamento / Envio de Acesso (WhatsApp e Link) */}
+      {modalAcessoAberta && empresaAcesso && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-xl w-full p-4 sm:p-6 shadow-2xl space-y-4 my-auto sm:my-6 max-h-[94dvh] sm:max-h-[92vh] flex flex-col overflow-y-auto">
+            
+            {/* Topo do Modal de Acesso */}
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Key className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-white leading-tight">
+                    Acesso da Oficina: {empresaAcesso.nome}
+                  </h2>
+                  <p className="text-[11px] text-zinc-400">
+                    Envie o acesso direto com 1 clique para o WhatsApp do cliente ou copie o link
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setModalAcessoAberta(false)}
+                className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition cursor-pointer"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Conteúdo das Credenciais */}
+            <div className="space-y-3.5 text-xs">
+              
+              {/* Card do Link Direto de Acesso */}
+              <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider">
+                    Link Direto com Auto-Conexão
+                  </span>
+                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
+                    Oficina ID: {empresaAcesso.id}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={`${typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app'}/?oficina=${empresaAcesso.id}`}
+                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono select-all focus:outline-none"
+                  />
+                  <button
+                    onClick={() => handleCopiarLink(empresaAcesso.id)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-200 rounded-lg border border-zinc-700 transition font-semibold cursor-pointer shrink-0"
+                    title="Copiar Link"
+                  >
+                    {copiadoLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-300" />}
+                    <span>{copiadoLink ? 'Copiado!' : 'Copiar'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Card dos Dados do Usuário / Senha */}
+              <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider">
+                    Credenciais do Administrador
+                  </span>
+                  {empresaAcesso.responsavel_nome && (
+                    <span className="text-[11px] text-zinc-300 font-medium">
+                      Resp: {empresaAcesso.responsavel_nome}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="bg-zinc-900/80 p-2.5 rounded-lg border border-zinc-800/60">
+                    <span className="text-[10px] text-zinc-500 block">Usuário / Login</span>
+                    <span className="text-xs font-bold text-white font-mono break-all">
+                      {adminAcesso?.email || empresaAcesso.email || 'Não configurado'}
+                    </span>
+                  </div>
+
+                  <div className="bg-zinc-900/80 p-2.5 rounded-lg border border-zinc-800/60 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-zinc-500 block">Senha Atual</span>
+                      <span className="text-xs font-bold text-emerald-400 font-mono">
+                        {adminAcesso?.senha || 'auto123'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditandoSenha(!editandoSenha);
+                        setNovaSenhaInput(adminAcesso?.senha || 'auto123');
+                      }}
+                      className="text-[10px] text-zinc-400 hover:text-white underline cursor-pointer"
+                    >
+                      {editandoSenha ? 'Cancelar' : 'Alterar'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Edição Rápida de Senha */}
+                {editandoSenha && (
+                  <div className="p-2.5 bg-zinc-900 rounded-lg border border-zinc-700 flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Nova senha..."
+                      value={novaSenhaInput}
+                      onChange={(e) => setNovaSenhaInput(e.target.value)}
+                      className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-white font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSalvarNovaSenha}
+                      disabled={salvandoSenha || !novaSenhaInput.trim()}
+                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold transition disabled:opacity-50 cursor-pointer"
+                    >
+                      {salvandoSenha ? 'Salvando...' : 'Salvar Senha'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Visualização da Mensagem Pré-Formatada do WhatsApp */}
+              <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider">
+                    Mensagem Pronta para WhatsApp
+                  </span>
+                  <span className="text-[10px] text-zinc-500">
+                    Número: {empresaAcesso.whatsapp || empresaAcesso.responsavel_contato || 'Não informado'}
+                  </span>
+                </div>
+                <div className="bg-zinc-900/90 border border-zinc-800/80 rounded-lg p-2.5 text-[11px] text-zinc-300 font-sans whitespace-pre-line max-h-36 overflow-y-auto leading-relaxed border-l-2 border-l-emerald-500">
+                  {montarTextoWhatsApp(empresaAcesso, adminAcesso, novaSenhaInput || undefined)}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Ações Inferiores - Enviar WhatsApp ou Copiar Mensagem */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-zinc-800 sticky bottom-0 bg-zinc-900/98 backdrop-blur-md z-10 shrink-0">
+              <button
+                type="button"
+                onClick={handleCopiarMensagemCompleta}
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-200 rounded-xl text-xs font-semibold transition border border-zinc-700 cursor-pointer"
+              >
+                {copiadoMsg ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-zinc-300" />}
+                <span>{copiadoMsg ? 'Mensagem Copiada!' : 'Copiar Texto'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleEnviarWhatsApp}
+                className="flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-950 cursor-pointer"
+              >
+                <Send className="w-4 h-4" />
+                <span>Enviar no WhatsApp do Dono</span>
+              </button>
+            </div>
+
           </div>
         </div>
       )}

@@ -19,6 +19,9 @@ import {
   ChevronDown,
   Menu,
   X,
+  Crown,
+  Lock,
+  LogOut,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -33,6 +36,7 @@ interface NavbarProps {
   onAbrirTour?: () => void;
   onSelectCliente?: (cliente: Cliente) => void;
   onSelectVeiculo?: (veiculo: Veiculo) => void;
+  onAbrirLoginAdmin?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -42,6 +46,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onAbrirTour,
   onSelectCliente,
   onSelectVeiculo,
+  onAbrirLoginAdmin,
 }) => {
   const {
     usuarioAtual,
@@ -52,6 +57,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     oficinaAtiva,
     oficinasDisponiveis,
     selecionarOficina,
+    logout,
   } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [totalPacotesDisponiveis, setTotalPacotesDisponiveis] = useState<number>(0);
@@ -81,14 +87,35 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'os', label: 'Ordens de Serviço', icon: FileText },
     { id: 'clientes', label: 'Clientes', icon: Users },
     { id: 'veiculos', label: 'Veículos', icon: Car },
+    { id: 'usuarios', label: 'Usuários', icon: ShieldCheck },
+    { id: 'admin_geral', label: 'Admin Geral (SaaS)', icon: Crown, master: true },
+    { id: 'empresas', label: 'Lojas (SaaS)', icon: Building2, adminOnly: true },
     { id: 'configuracoes', label: 'Oficina (Ajustes)', icon: Settings },
-    { id: 'empresas', label: 'Empresas (SaaS)', icon: Building2, adminOnly: true },
-    { id: 'usuarios', label: 'Usuários', icon: ShieldCheck, adminOnly: true },
     { id: 'backup', label: 'Backup & Banco', icon: HardDrive },
     { id: 'atualizacoes', label: 'Atualizações', icon: ArrowUpCircle, adminOnly: true, badge: totalPacotesDisponiveis },
   ];
 
   const handleNavegar = (id: string) => {
+    if (id === 'admin_geral' && !isSuperAdmin) {
+      if (onAbrirLoginAdmin) {
+        onAbrirLoginAdmin();
+      } else {
+        onSelectTab(id);
+      }
+      setMenuMobileAberto(false);
+      return;
+    }
+
+    if (id === 'usuarios' && !isAdmin) {
+      if (onAbrirLoginAdmin) {
+        onAbrirLoginAdmin();
+      } else {
+        onSelectTab(id);
+      }
+      setMenuMobileAberto(false);
+      return;
+    }
+
     onSelectTab(id);
     setMenuMobileAberto(false);
   };
@@ -167,6 +194,37 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </button>
 
+            {/* Botão Destaque Admin Geral / Portal Master Micro-SaaS */}
+            {isSuperAdmin ? (
+              <button
+                id="btn-navbar-admin-geral"
+                type="button"
+                onClick={() => handleNavegar('admin_geral')}
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-1.5 rounded-lg text-xs font-bold transition shadow-md cursor-pointer shrink-0 ${
+                  currentTab === 'admin_geral'
+                    ? 'bg-amber-500 text-zinc-950 border border-amber-400 shadow-amber-950/60'
+                    : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 shadow-amber-950/30'
+                }`}
+                title="Painel Geral do Micro-SaaS (Super Admin Master)"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Admin Geral (SaaS)</span>
+                <span className="sm:hidden">Master</span>
+              </button>
+            ) : (
+              <button
+                id="btn-navbar-login-admin"
+                type="button"
+                onClick={() => onAbrirLoginAdmin?.()}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 hover:border-amber-500/50 text-xs font-semibold transition cursor-pointer shrink-0"
+                title="Entrar como Administrador Geral do Micro-SaaS"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Área Admin Geral</span>
+                <span className="sm:hidden">Admin</span>
+              </button>
+            )}
+
             {/* Botão Nova OS em Destaque */}
             <button
               id="btn-navbar-nova-os"
@@ -218,6 +276,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
 
+            {/* Botão Sair / Logout */}
+            <button
+              type="button"
+              id="btn-navbar-logout"
+              onClick={() => logout()}
+              className="hidden sm:flex items-center gap-1 px-2 py-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/60 text-zinc-400 hover:text-red-300 border border-zinc-800 hover:border-red-800/60 text-xs transition cursor-pointer shrink-0"
+              title="Sair do sistema e ir para a tela de login"
+            >
+              <LogOut className="w-3.5 h-3.5 text-zinc-400 hover:text-red-400" />
+              <span className="hidden xl:inline text-[11px]">Sair</span>
+            </button>
+
             {/* Botão Menu Hamburger para Mobile e Tablets (< xl) */}
             <button
               type="button"
@@ -235,7 +305,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         
         {/* Barra de Navegação Rápida Superior em Telas Menores */}
         <div className="xl:hidden flex overflow-x-auto py-1.5 gap-1 border-t border-zinc-800/80 scrollbar-none">
-          {navItems.slice(0, 5).map((item) => {
+          {navItems.map((item) => {
             const Icon = item.icon;
             const active = currentTab === item.id;
             return (
@@ -245,22 +315,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap shrink-0 cursor-pointer ${
                   active
                     ? 'bg-red-600/20 text-red-400 font-bold border border-red-500/30'
+                    : item.master
+                    ? 'text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30'
                     : 'text-zinc-400 hover:text-zinc-200 bg-zinc-900/50'
                 }`}
               >
-                <Icon className="w-3 h-3" />
+                <Icon className={`w-3 h-3 ${item.master ? 'text-amber-400' : ''}`} />
                 <span>{item.label}</span>
               </button>
             );
           })}
-          {navItems.length > 5 && (
-            <button
-              onClick={() => setMenuMobileAberto(true)}
-              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-900/70 border border-zinc-800 whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <span>+ Mais opções</span>
-            </button>
-          )}
         </div>
 
       </div>
@@ -309,6 +373,31 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
 
+            {/* Banner de Acesso Rápido Admin Geral na Gaveta */}
+            <div className="p-3 bg-gradient-to-r from-amber-500/15 to-zinc-950 rounded-xl border border-amber-500/30 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Crown className="w-5 h-5 text-amber-400 shrink-0" />
+                <div>
+                  <p className="text-xs font-bold text-amber-300">Administração Geral (SaaS)</p>
+                  <p className="text-[10px] text-zinc-400">Gerenciar todas as oficinas e lojas</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuMobileAberto(false);
+                  if (isSuperAdmin) {
+                    onSelectTab('admin_geral');
+                  } else {
+                    onAbrirLoginAdmin?.();
+                  }
+                }}
+                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer shrink-0"
+              >
+                {isSuperAdmin ? 'Abrir Painel' : 'Fazer Login'}
+              </button>
+            </div>
+
             {/* Menu Completo de Páginas */}
             <div className="space-y-1">
               <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-2 mb-1">
@@ -355,6 +444,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>Como Usar (Guia Passo a Passo)</span>
               </button>
             )}
+
+            {/* Botão Sair / Logout Mobile */}
+            <button
+              onClick={() => {
+                setMenuMobileAberto(false);
+                logout();
+              }}
+              className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-800 text-zinc-300 hover:text-red-300 text-xs font-semibold cursor-pointer transition"
+            >
+              <LogOut className="w-4 h-4 text-zinc-400" />
+              <span>Sair do Sistema (Fazer Logout)</span>
+            </button>
 
             <button
               onClick={() => setMenuMobileAberto(false)}

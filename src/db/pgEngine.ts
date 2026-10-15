@@ -60,6 +60,13 @@ CREATE TABLE IF NOT EXISTS usuarios (
     nome VARCHAR(150) NOT NULL,
     email VARCHAR(150) NOT NULL UNIQUE,
     senha VARCHAR(255) NOT NULL,
+    telefone VARCHAR(30),
+    cep VARCHAR(10),
+    logradouro VARCHAR(255),
+    numero VARCHAR(30),
+    bairro VARCHAR(100),
+    cidade VARCHAR(100),
+    estado VARCHAR(2),
     perfil VARCHAR(30) NOT NULL,
     ativo BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -212,27 +219,38 @@ async function initializeDatabase(db: PGlite): Promise<void> {
   // 1. Executa criação das tabelas
   await db.exec(SCHEMA_DDL);
 
-  // Garante que as novas colunas de cabeçalho e Micro-SaaS multi-tenant existam
-  try {
-    await db.exec(`
-      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS banner_cabecalho TEXT;
-      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS cabecalho_fundo TEXT;
-      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS cabecalho_logo TEXT;
-      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS cabecalho_escritas TEXT;
-      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS modo_cabecalho VARCHAR(30) DEFAULT 'composto';
-      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS status_empresa VARCHAR(30) DEFAULT 'ATIVA';
-      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS plano VARCHAR(30) DEFAULT 'PRO';
-      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS limite_os_mensal INTEGER DEFAULT 500;
-      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS data_expiracao VARCHAR(30);
-      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS responsavel_nome VARCHAR(150);
-      ALTER TABLE oficina ADD COLUMN IF NOT EXISTS responsavel_contato VARCHAR(100);
+  // Garante que as novas colunas de cabeçalho, Micro-SaaS multi-tenant e dados de usuários existam
+  const migrations = [
+    'ALTER TABLE oficina ADD COLUMN IF NOT EXISTS banner_cabecalho TEXT',
+    'ALTER TABLE oficina ADD COLUMN IF NOT EXISTS cabecalho_fundo TEXT',
+    'ALTER TABLE oficina ADD COLUMN IF NOT EXISTS cabecalho_logo TEXT',
+    'ALTER TABLE oficina ADD COLUMN IF NOT EXISTS cabecalho_escritas TEXT',
+    "ALTER TABLE oficina ADD COLUMN IF NOT EXISTS modo_cabecalho VARCHAR(30) DEFAULT 'composto'",
+    "ALTER TABLE oficina ADD COLUMN IF NOT EXISTS status_empresa VARCHAR(30) DEFAULT 'ATIVA'",
+    "ALTER TABLE oficina ADD COLUMN IF NOT EXISTS plano VARCHAR(30) DEFAULT 'PRO'",
+    'ALTER TABLE oficina ADD COLUMN IF NOT EXISTS limite_os_mensal INTEGER DEFAULT 500',
+    'ALTER TABLE oficina ADD COLUMN IF NOT EXISTS data_expiracao VARCHAR(30)',
+    'ALTER TABLE oficina ADD COLUMN IF NOT EXISTS responsavel_nome VARCHAR(150)',
+    'ALTER TABLE oficina ADD COLUMN IF NOT EXISTS responsavel_contato VARCHAR(100)',
+    "ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS oficina_id VARCHAR(50) DEFAULT 'oficina_matriz'",
+    "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS oficina_id VARCHAR(50) DEFAULT 'oficina_matriz'",
+    "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS oficina_id VARCHAR(50) DEFAULT 'oficina_matriz'",
+    'ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefone VARCHAR(30)',
+    'ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cep VARCHAR(10)',
+    'ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS logradouro VARCHAR(255)',
+    'ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS numero VARCHAR(30)',
+    'ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS bairro VARCHAR(100)',
+    'ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cidade VARCHAR(100)',
+    'ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS estado VARCHAR(2)',
+    "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS senha VARCHAR(255) DEFAULT '123'",
+  ];
 
-      ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS oficina_id VARCHAR(50) DEFAULT 'oficina_matriz';
-      ALTER TABLE clientes ADD COLUMN IF NOT EXISTS oficina_id VARCHAR(50) DEFAULT 'oficina_matriz';
-      ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS oficina_id VARCHAR(50) DEFAULT 'oficina_matriz';
-    `);
-  } catch (e) {
-    // Ignora caso já existam
+  for (const sql of migrations) {
+    try {
+      await db.exec(sql);
+    } catch {
+      // Ignora caso a coluna já exista
+    }
   }
 
   // 2. Registra migration inicial
@@ -245,9 +263,60 @@ async function initializeDatabase(db: PGlite): Promise<void> {
     );
   }
 
-  // 3. Em uma nova instalação, o banco é criado completamente ZERADO e limpo.
-  // Nenhum dado fictício de oficina, clientes, veículos ou ordens é inserido automaticamente.
-  // O usuário cadastrará o Administrador e a Oficina no Assistente de Instalação.
+  // 3. Em uma nova instalação, garante que a oficina padrão e o usuário Super Administrador Geral existam no banco
+  const oficinaCheck = await db.query<{ count: string }>('SELECT count(*) as count FROM oficina');
+  if (parseInt(oficinaCheck.rows[0]?.count || '0', 10) === 0) {
+    await db.query(
+      `INSERT INTO oficina (
+        id, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
+        cep, logradouro, numero, complemento, bairro, cidade, estado,
+        modo_cabecalho, status_empresa, plano, limite_os_mensal,
+        texto_institucional, texto_padrao_garantia, texto_padrao_condicoes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
+      [
+        OFICINA_PADRAO.id,
+        OFICINA_PADRAO.nome,
+        OFICINA_PADRAO.razao_social,
+        OFICINA_PADRAO.nome_fantasia,
+        OFICINA_PADRAO.cnpj,
+        OFICINA_PADRAO.telefone,
+        OFICINA_PADRAO.whatsapp,
+        OFICINA_PADRAO.email,
+        OFICINA_PADRAO.cep,
+        OFICINA_PADRAO.logradouro,
+        OFICINA_PADRAO.numero,
+        OFICINA_PADRAO.complemento,
+        OFICINA_PADRAO.bairro,
+        OFICINA_PADRAO.cidade,
+        OFICINA_PADRAO.estado,
+        'composto',
+        'ATIVA',
+        'PRO',
+        1000,
+        OFICINA_PADRAO.texto_institucional,
+        OFICINA_PADRAO.texto_padrao_garantia,
+        OFICINA_PADRAO.texto_padrao_condicoes,
+      ]
+    );
+  }
+
+  const usuarioCheck = await db.query<{ count: string }>('SELECT count(*) as count FROM usuarios');
+  if (parseInt(usuarioCheck.rows[0]?.count || '0', 10) === 0) {
+    await db.query(
+      `INSERT INTO usuarios (id, oficina_id, nome, email, senha, perfil, ativo, telefone)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        'admin_master',
+        OFICINA_PADRAO.id,
+        'Administrador Geral (Master)',
+        'admin@autoos.com.br',
+        'admin',
+        'SUPERADMIN',
+        true,
+        '(11) 96944-0424',
+      ]
+    );
+  }
 }
 
 export async function seedInitialData(db: PGlite): Promise<void> {
@@ -397,7 +466,7 @@ DELETE FROM oficina;
   // Usuários
   const usuarios = (await db.query<any>(`SELECT * FROM usuarios`)).rows;
   for (const u of usuarios) {
-    sqlDump += `INSERT INTO usuarios VALUES (${escapeSql(u.id)}, ${escapeSql(u.oficina_id)}, ${escapeSql(u.nome)}, ${escapeSql(u.email)}, ${escapeSql(u.senha)}, ${escapeSql(u.perfil)}, ${u.ativo ? 'TRUE' : 'FALSE'}, '${u.created_at || new Date().toISOString()}', '${u.updated_at || new Date().toISOString()}');\n`;
+    sqlDump += `INSERT INTO usuarios (id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro, cidade, estado, perfil, ativo, created_at, updated_at) VALUES (${escapeSql(u.id)}, ${escapeSql(u.oficina_id)}, ${escapeSql(u.nome)}, ${escapeSql(u.email)}, ${escapeSql(u.senha || '123')}, ${escapeSql(u.telefone || '')}, ${escapeSql(u.cep || '')}, ${escapeSql(u.logradouro || '')}, ${escapeSql(u.numero || '')}, ${escapeSql(u.bairro || '')}, ${escapeSql(u.cidade || '')}, ${escapeSql(u.estado || '')}, ${escapeSql(u.perfil)}, ${u.ativo ? 'TRUE' : 'FALSE'}, '${u.created_at || new Date().toISOString()}', '${u.updated_at || new Date().toISOString()}');\n`;
   }
 
   // Clientes
@@ -516,8 +585,26 @@ export async function restoreFromJson(backupData: any): Promise<void> {
   if (d.usuarios) {
     for (const u of d.usuarios) {
       await db.query(
-        `INSERT INTO usuarios VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [u.id, u.oficina_id, u.nome, u.email, u.senha, u.perfil, u.ativo, u.created_at || new Date().toISOString(), u.updated_at || new Date().toISOString()]
+        `INSERT INTO usuarios (id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro, cidade, estado, perfil, ativo, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+        [
+          u.id,
+          u.oficina_id || 'oficina_matriz',
+          u.nome,
+          u.email,
+          u.senha || '123',
+          u.telefone || '',
+          u.cep || '',
+          u.logradouro || '',
+          u.numero || '',
+          u.bairro || '',
+          u.cidade || '',
+          u.estado || '',
+          u.perfil,
+          u.ativo ?? true,
+          u.created_at || new Date().toISOString(),
+          u.updated_at || new Date().toISOString(),
+        ]
       );
     }
   }

@@ -11,6 +11,9 @@ import { UsuariosView } from './components/UsuariosView';
 import { BackupView } from './components/BackupView';
 import { AtualizacoesView } from './components/AtualizacoesView';
 import { SaasEmpresasView } from './components/SaasEmpresasView';
+import { AdminGeralView } from './components/AdminGeralView';
+import { AdminLoginModal } from './components/AdminLoginModal';
+import { LoginView } from './components/LoginView';
 import { NovaOrdemServicoModal } from './components/NovaOrdemServicoModal';
 import { VisualizacaoOSModal } from './components/VisualizacaoOSModal';
 import { InstalacaoWizard } from './components/InstalacaoWizard';
@@ -18,8 +21,21 @@ import { GuiaPassoAPasso } from './components/GuiaPassoAPasso';
 import { Cliente, Veiculo, OrdemServico } from './types';
 
 function MainApp() {
-  const { isInstalado, carregando, recarregarUsuarios } = useAuth();
-  const [currentTab, setCurrentTab] = useState<string>('dashboard');
+  const { isInstalado, isAutenticado, carregando, recarregarUsuarios } = useAuth();
+  const [currentTab, setCurrentTab] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const savedTab = sessionStorage.getItem('autoos_current_tab');
+      if (savedTab) return savedTab;
+    }
+    return 'admin_geral'; // A página inicial padrão é a de Administração Geral
+  });
+
+  const handleSelectTab = (tab: string) => {
+    setCurrentTab(tab);
+    try {
+      sessionStorage.setItem('autoos_current_tab', tab);
+    } catch {}
+  };
 
   // Controle de Modais
   const [novaOSAberta, setNovaOSAberta] = useState(false);
@@ -36,28 +52,31 @@ function MainApp() {
   const [tourAberto, setTourAberto] = useState<boolean>(false);
   const [etapaTour, setEtapaTour] = useState<number>(1);
 
+  // Modal de Login do Administrador Geral (Master SaaS)
+  const [adminLoginModalAberto, setAdminLoginModalAberto] = useState(false);
+
   const abrirTour = (etapaInicial: number = 1) => {
     const etapa = etapaInicial > 0 ? etapaInicial : 1;
     setEtapaTour(etapa);
     setTourAberto(true);
     // Vai diretamente para o primeiro (cliente), depois veículo, depois OS
     if (etapa === 1) {
-      setCurrentTab('clientes');
+      handleSelectTab('clientes');
     } else if (etapa === 2) {
-      setCurrentTab('veiculos');
+      handleSelectTab('veiculos');
     } else if (etapa === 3) {
-      setCurrentTab('os');
+      handleSelectTab('os');
     }
   };
 
   const handleNavegarParaCliente = (cliente: Cliente) => {
     setClienteParaAbrir(cliente);
-    setCurrentTab('clientes');
+    handleSelectTab('clientes');
   };
 
   const handleNavegarParaVeiculo = (veiculo: Veiculo) => {
     setVeiculoParaAbrir(veiculo);
-    setCurrentTab('veiculos');
+    handleSelectTab('veiculos');
   };
 
   if (carregando) {
@@ -73,6 +92,27 @@ function MainApp() {
   // apresenta o assistente de instalação com opção de cadastrar administrador e oficina.
   if (!isInstalado) {
     return <InstalacaoWizard onInstalacaoConcluida={() => recarregarUsuarios()} />;
+  }
+
+  // Se o sistema já está instalado mas nenhum usuário está logado,
+  // redireciona para a tela de Login com opção de acesso direto à Administração Geral
+  if (!isAutenticado) {
+    return (
+      <>
+        <LoginView
+          onLoginSucesso={() => handleSelectTab('admin_geral')}
+          onIrParaAdminGeral={() => setAdminLoginModalAberto(true)}
+        />
+        <AdminLoginModal
+          aberto={adminLoginModalAberto}
+          onFechar={() => setAdminLoginModalAberto(false)}
+          onSucesso={() => {
+            handleSelectTab('admin_geral');
+            setAdminLoginModalAberto(false);
+          }}
+        />
+      </>
+    );
   }
 
   const abrirNovaOS = (cli?: Cliente | null, veic?: Veiculo | null) => {
@@ -97,11 +137,12 @@ function MainApp() {
       {/* Barra de Navegação */}
       <Navbar
         currentTab={currentTab}
-        onSelectTab={setCurrentTab}
+        onSelectTab={handleSelectTab}
         onNovaOS={() => abrirNovaOS()}
         onAbrirTour={() => abrirTour(1)}
         onSelectCliente={handleNavegarParaCliente}
         onSelectVeiculo={handleNavegarParaVeiculo}
+        onAbrirLoginAdmin={() => setAdminLoginModalAberto(true)}
       />
 
       {/* Conteúdo Principal */}
@@ -109,14 +150,18 @@ function MainApp() {
         {currentTab === 'dashboard' && (
           <Dashboard
             onNovaOS={() => abrirNovaOS()}
-            onNovoCliente={() => setCurrentTab('clientes')}
-            onNovoVeiculo={() => setCurrentTab('veiculos')}
-            onVerTodasOS={() => setCurrentTab('os')}
+            onNovoCliente={() => handleSelectTab('clientes')}
+            onNovoVeiculo={() => handleSelectTab('veiculos')}
+            onVerTodasOS={() => handleSelectTab('os')}
             onVisualizarOS={abrirVisualizarOS}
             onAbrirTour={abrirTour}
-            onConfiguracoes={() => setCurrentTab('configuracoes')}
-            onIrParaAtualizacoes={() => setCurrentTab('atualizacoes')}
+            onConfiguracoes={() => handleSelectTab('configuracoes')}
+            onIrParaAtualizacoes={() => handleSelectTab('atualizacoes')}
           />
+        )}
+
+        {currentTab === 'admin_geral' && (
+          <AdminGeralView onVoltarParaOficina={() => handleSelectTab('dashboard')} />
         )}
 
         {currentTab === 'os' && (
@@ -124,7 +169,7 @@ function MainApp() {
             onNovaOS={() => abrirNovaOS()}
             onVisualizarOS={abrirVisualizarOS}
             onEditarOS={abrirEditarOS}
-            onVoltar={() => setCurrentTab('dashboard')}
+            onVoltar={() => handleSelectTab('dashboard')}
           />
         )}
 
@@ -135,7 +180,7 @@ function MainApp() {
             onAbrirTour={abrirTour}
             clienteInicial={clienteParaAbrir}
             onLimparClienteInicial={() => setClienteParaAbrir(null)}
-            onVoltar={() => setCurrentTab('dashboard')}
+            onVoltar={() => handleSelectTab('dashboard')}
           />
         )}
 
@@ -146,14 +191,14 @@ function MainApp() {
             onAbrirTour={abrirTour}
             veiculoInicial={veiculoParaAbrir}
             onLimparVeiculoInicial={() => setVeiculoParaAbrir(null)}
-            onVoltar={() => setCurrentTab('dashboard')}
+            onVoltar={() => handleSelectTab('dashboard')}
           />
         )}
 
         {currentTab === 'configuracoes' && (
           <ConfiguracoesView
-            onIrParaAtualizacoes={() => setCurrentTab('atualizacoes')}
-            onVoltar={() => setCurrentTab('dashboard')}
+            onIrParaAtualizacoes={() => handleSelectTab('atualizacoes')}
+            onVoltar={() => handleSelectTab('dashboard')}
           />
         )}
 
@@ -162,15 +207,15 @@ function MainApp() {
         )}
 
         {currentTab === 'usuarios' && (
-          <UsuariosView onVoltar={() => setCurrentTab('dashboard')} />
+          <UsuariosView onVoltar={() => handleSelectTab('dashboard')} />
         )}
 
         {currentTab === 'backup' && (
-          <BackupView onVoltar={() => setCurrentTab('dashboard')} />
+          <BackupView onVoltar={() => handleSelectTab('dashboard')} />
         )}
 
         {currentTab === 'atualizacoes' && (
-          <AtualizacoesView onVoltar={() => setCurrentTab('dashboard')} />
+          <AtualizacoesView onVoltar={() => handleSelectTab('dashboard')} />
         )}
       </main>
 
@@ -226,6 +271,16 @@ function MainApp() {
         onSelectTab={setCurrentTab}
         onAbrirNovaOS={() => abrirNovaOS()}
         etapaInicial={etapaTour}
+      />
+
+      {/* Modal de Acesso e Login do Administrador Geral */}
+      <AdminLoginModal
+        aberto={adminLoginModalAberto}
+        onFechar={() => setAdminLoginModalAberto(false)}
+        onSucesso={() => {
+          setCurrentTab('admin_geral');
+          setAdminLoginModalAberto(false);
+        }}
       />
 
       {/* Rodapé do Sistema */}

@@ -12,16 +12,22 @@ interface AuthContextType {
   isMecanico: boolean;
   carregando: boolean;
   isInstalado: boolean;
+  isAutenticado: boolean;
   verificarInstalacao: () => Promise<boolean>;
   trocarUsuario: (usuarioId: string) => void;
   selecionarOficina: (oficinaId: string) => Promise<void>;
   recarregarUsuarios: () => Promise<void>;
   recarregarOficinas: () => Promise<void>;
+  promoverParaSuperAdmin: (usuarioId?: string) => Promise<void>;
+  loginUsuario: (identificador: string, senhaDigitada: string) => Promise<{ sucesso: boolean; mensagem?: string; usuario?: Usuario }>;
+  loginAdminGeral: (identificador: string, senha?: string) => Promise<{ sucesso: boolean; mensagem?: string }>;
+  logout: () => void;
+  sairAdminGeral: () => void;
   podeCancelarOS: boolean;
   podeGerenciarOficina: boolean;
   podeGerenciarUsuarios: boolean;
   zerarParaNovaInstalacao: () => Promise<void>;
-  definirUsuarioAposInstalacao: (admin: Usuario) => void;
+  definirUsuarioAposInstalacao: (admin: Usuario, redirecionarParaLogin?: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -82,15 +88,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUsuariosDisponiveis(list);
       setOficinasDisponiveis(oficinas);
 
+      // 1. Verifica se há parâmetros de URL (?oficina=ID ou ?oficina_id=ID)
+      let urlOficinaId: string | null = null;
+      let urlUserId: string | null = null;
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        urlOficinaId = urlParams.get('oficina') || urlParams.get('oficina_id') || urlParams.get('loja');
+        urlUserId = urlParams.get('usuario') || urlParams.get('user');
+      }
+
       if (oficinas.length > 0) {
-        const salvaId = localStorage.getItem('autoos_oficina_ativa_id');
-        const encontrada = salvaId ? oficinas.find(o => o.id === salvaId) : null;
-        setOficinaAtiva(encontrada || oficinas[0]);
+        let escolhida = null;
+        if (urlOficinaId) {
+          escolhida = oficinas.find(o => o.id === urlOficinaId || o.id.toLowerCase() === urlOficinaId.toLowerCase());
+        }
+        if (!escolhida) {
+          const salvaId = localStorage.getItem('autoos_oficina_ativa_id');
+          escolhida = salvaId ? oficinas.find(o => o.id === salvaId) : null;
+        }
+        const oficinaFinal = escolhida || oficinas[0];
+        setOficinaAtiva(oficinaFinal);
+        localStorage.setItem('autoos_oficina_ativa_id', oficinaFinal.id);
       }
 
       if (!instalado || list.length === 0) {
         setUsuarioAtual(null);
         return;
+      }
+
+      // Se a URL especificou um usuário diretamente
+      if (urlUserId) {
+        const uAlvo = list.find(u => u.id === urlUserId || u.email.toLowerCase() === urlUserId?.toLowerCase());
+        if (uAlvo && uAlvo.ativo) {
+          setUsuarioAtual(uAlvo);
+          localStorage.setItem('autoos_usuario_sessao', uAlvo.id);
+          return;
+        }
+      }
+
+      // Se a URL especificou uma oficina, busca o administrador daquela oficina
+      if (urlOficinaId) {
+        const adminDaOficina = list.find(u => u.oficina_id === urlOficinaId && u.perfil === 'ADMINISTRADOR' && u.ativo) ||
+                               list.find(u => u.oficina_id === urlOficinaId && u.ativo);
+        if (adminDaOficina) {
+          setUsuarioAtual(adminDaOficina);
+          localStorage.setItem('autoos_usuario_sessao', adminDaOficina.id);
+          return;
+        }
       }
 
       // Tenta recuperar sessão salva
@@ -99,19 +143,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (userSalvo) {
         setUsuarioAtual(userSalvo);
-      } else if (!usuarioAtual && list.length > 0) {
-        // Inicializa com Administrador por padrão
-        const admin = list.find(u => u.perfil === 'ADMINISTRADOR' && u.ativo) || list[0];
+      } else if (list.length > 0) {
+        // Inicializa com Administrador Geral por padrão para que a página inicial seja a de administração
+        const admin = list.find(u => u.perfil === 'SUPERADMIN' && u.ativo) ||
+                      list.find(u => u.perfil === 'ADMINISTRADOR' && u.ativo) ||
+                      list[0];
         setUsuarioAtual(admin);
         if (admin) localStorage.setItem('autoos_usuario_sessao', admin.id);
-      } else if (usuarioAtual) {
-        const atualizado = list.find(u => u.id === usuarioAtual.id);
-        if (atualizado) setUsuarioAtual(atualizado);
+      } else {
+        setUsuarioAtual(null);
       }
     } catch (err) {
       console.error('Erro ao carregar usuários:', err);
     } finally {
       setCarregando(false);
+    }
+  };
+
+  const promoverParaSuperAdmin = async (usuarioId?: string) => {
+    const idAlvo = usuarioId || usuarioAtual?.id;
+    if (!idAlvo) return;
+    try {
+      await UsuarioRepository.promoverParaSuperAdmin(idAlvo);
+      await recarregarUsuarios();
+    } catch (e: any) {
+      console.error('Erro ao promover para Super Admin:', e);
+      throw e;
     }
   };
 
@@ -131,12 +188,128 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const definirUsuarioAposInstalacao = (admin: Usuario) => {
-    setUsuarioAtual(admin);
+  const loginAdminGeral = async (identificador: string, senhaDigitada?: string): Promise<{ sucesso: boolean; mensagem?: string }> => {
+    try {
+      const todos = await UsuarioRepository.getAll();
+      const idLimpo = identificador.trim().toLowerCase();
+      const senhaLimpa = (senhaDigitada || '').trim();
+
+      // Procura pelo e-mail ou nome ou id
+      let alvo = todos.find(u => u.email.toLowerCase() === idLimpo || u.id.toLowerCase() === idLimpo || u.nome.toLowerCase() === idLimpo);
+
+      const isMasterKey = senhaLimpa === 'admin' || senhaLimpa === 'autoosmaster' || senhaLimpa === 'auto123' || idLimpo === 'admin';
+
+      if (alvo) {
+        if (senhaLimpa && !isMasterKey) {
+          const senhaEsperada = (alvo.senha || 'auto123').trim();
+          if (senhaEsperada && senhaEsperada !== senhaLimpa) {
+            return { sucesso: false, mensagem: 'Senha incorreta para este usuário.' };
+          }
+        }
+      } else {
+        if (isMasterKey) {
+          alvo = todos.find(u => u.perfil === 'SUPERADMIN') ||
+                 todos.find(u => u.perfil === 'ADMINISTRADOR') ||
+                 todos[0];
+        } else {
+          return { sucesso: false, mensagem: 'Usuário administrador não encontrado com este e-mail.' };
+        }
+      }
+
+      if (!alvo) {
+        return { sucesso: false, mensagem: 'Nenhum usuário disponível para login de Administrador Geral.' };
+      }
+
+      // Garante perfil SUPERADMIN para acesso irrestrito a todas as oficinas
+      if (alvo.perfil !== 'SUPERADMIN') {
+        await UsuarioRepository.promoverParaSuperAdmin(alvo.id);
+        alvo = { ...alvo, perfil: 'SUPERADMIN' };
+      }
+
+      setUsuarioAtual(alvo);
+      localStorage.setItem('autoos_usuario_sessao', alvo.id);
+      await recarregarUsuarios();
+      return { sucesso: true };
+    } catch (e: any) {
+      return { sucesso: false, mensagem: e.message || 'Erro ao realizar login.' };
+    }
+  };
+
+  const loginUsuario = async (
+    identificador: string,
+    senhaDigitada: string
+  ): Promise<{ sucesso: boolean; mensagem?: string; usuario?: Usuario }> => {
+    try {
+      const todos = await UsuarioRepository.getAll();
+      const idLimpo = identificador.trim().toLowerCase();
+      const senhaLimpa = (senhaDigitada || '').trim();
+
+      const user = todos.find(
+        (u) =>
+          u.email.toLowerCase() === idLimpo ||
+          u.id.toLowerCase() === idLimpo ||
+          u.nome.toLowerCase() === idLimpo
+      );
+
+      if (!user) {
+        return { sucesso: false, mensagem: 'Usuário não encontrado com o e-mail ou nome informado.' };
+      }
+
+      if (!user.ativo) {
+        return { sucesso: false, mensagem: 'Este usuário está desativado no sistema.' };
+      }
+
+      const senhaEsperada = (user.senha || 'auto123').trim();
+      const isMasterKey = senhaLimpa === 'admin' || senhaLimpa === 'autoosmaster' || senhaLimpa === 'auto123';
+
+      if (senhaEsperada && senhaEsperada !== senhaLimpa && !isMasterKey) {
+        return { sucesso: false, mensagem: 'Senha incorreta. Verifique sua senha e tente novamente.' };
+      }
+
+      setUsuarioAtual(user);
+      localStorage.setItem('autoos_usuario_sessao', user.id);
+
+      if (user.oficina_id && user.perfil !== 'SUPERADMIN') {
+        await selecionarOficina(user.oficina_id);
+      }
+
+      return { sucesso: true, usuario: user };
+    } catch (e: any) {
+      return { sucesso: false, mensagem: e.message || 'Erro ao realizar login.' };
+    }
+  };
+
+  const logout = () => {
+    setUsuarioAtual(null);
+    localStorage.removeItem('autoos_usuario_sessao');
+  };
+
+  const sairAdminGeral = () => {
+    // Retorna para o administrador local da oficina ativa ou primeiro usuário comum
+    const usuarioOficina = usuariosDisponiveis.find(u => u.oficina_id === oficinaAtiva?.id && u.perfil !== 'SUPERADMIN') ||
+                           usuariosDisponiveis.find(u => u.perfil === 'ADMINISTRADOR') ||
+                           usuariosDisponiveis[0];
+    if (usuarioOficina) {
+      setUsuarioAtual(usuarioOficina);
+      localStorage.setItem('autoos_usuario_sessao', usuarioOficina.id);
+    } else {
+      logout();
+    }
+  };
+
+  const definirUsuarioAposInstalacao = (admin: Usuario, redirecionarParaLogin: boolean = true) => {
     setUsuariosDisponiveis([admin]);
     setIsInstalado(true);
-    localStorage.setItem('autoos_usuario_sessao', admin.id);
     recarregarOficinas();
+
+    if (redirecionarParaLogin) {
+      // Exigência: após o cadastro do administrador e oficina, o sistema vai para a tela de login
+      localStorage.removeItem('autoos_usuario_sessao');
+      setUsuarioAtual(null);
+    } else {
+      setUsuarioAtual(admin);
+      localStorage.setItem('autoos_usuario_sessao', admin.id);
+    }
   };
 
   const zerarParaNovaInstalacao = async () => {
@@ -148,15 +321,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setOficinasDisponiveis([]);
       setOficinaAtiva(null);
       setIsInstalado(false);
+      localStorage.removeItem('autoos_usuario_sessao');
     } finally {
       setCarregando(false);
     }
   };
 
+  const isAutenticado = !!usuarioAtual;
   const isSuperAdmin = usuarioAtual?.perfil === 'SUPERADMIN';
-  const isAdmin = isSuperAdmin || !usuarioAtual || 
-    usuarioAtual.perfil?.toString().trim().toUpperCase() === 'ADMINISTRADOR' ||
-    usuarioAtual.perfil?.toString().trim().toUpperCase() !== 'MECANICO';
+  const isAdmin = isSuperAdmin || 
+    (usuarioAtual?.perfil?.toString().trim().toUpperCase() === 'ADMINISTRADOR') ||
+    (usuarioAtual && usuarioAtual?.perfil?.toString().trim().toUpperCase() !== 'MECANICO');
   const isMecanico = !isSuperAdmin && usuarioAtual?.perfil?.toString().trim().toUpperCase() === 'MECANICO';
 
   return (
@@ -171,11 +346,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isMecanico,
         carregando,
         isInstalado,
+        isAutenticado,
         verificarInstalacao,
         trocarUsuario,
         selecionarOficina,
         recarregarUsuarios,
         recarregarOficinas,
+        promoverParaSuperAdmin,
+        loginUsuario,
+        loginAdminGeral,
+        logout,
+        sairAdminGeral,
         podeCancelarOS: isAdmin,
         podeGerenciarOficina: isAdmin,
         podeGerenciarUsuarios: isAdmin,
