@@ -91,31 +91,26 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'os', label: 'Ordens de Serviço', icon: FileText },
     { id: 'clientes', label: 'Clientes', icon: Users },
     { id: 'veiculos', label: 'Veículos', icon: Car },
-    { id: 'usuarios', label: 'Usuários', icon: ShieldCheck },
-    { id: 'admin_geral', label: 'Admin Geral (SaaS)', icon: Crown, master: true },
-    { id: 'empresas', label: 'Lojas (SaaS)', icon: Building2, adminOnly: true },
+    { id: 'usuarios', label: 'Usuários da Loja', icon: ShieldCheck, adminOnly: true },
+    ...(isSuperAdmin
+      ? [
+          { id: 'admin_geral', label: 'Admin Geral (SaaS)', icon: Crown, master: true },
+          { id: 'empresas', label: 'Lojas (SaaS)', icon: Building2, master: true },
+          { id: 'atualizacoes', label: 'Atualizações', icon: ArrowUpCircle, master: true, badge: totalPacotesDisponiveis },
+        ]
+      : []),
     { id: 'configuracoes', label: 'Oficina (Ajustes)', icon: Settings },
-    { id: 'backup', label: 'Backup & Banco', icon: HardDrive },
-    { id: 'atualizacoes', label: 'Atualizações', icon: ArrowUpCircle, adminOnly: true, badge: totalPacotesDisponiveis },
+    { id: 'backup', label: 'Backup & Banco', icon: HardDrive, adminOnly: true },
   ];
 
   const handleNavegar = (id: string) => {
-    if (id === 'admin_geral' && !isSuperAdmin) {
-      if (onAbrirLoginAdmin) {
-        onAbrirLoginAdmin();
-      } else {
-        onSelectTab(id);
-      }
+    if ((id === 'admin_geral' || id === 'empresas' || id === 'atualizacoes') && !isSuperAdmin) {
+      onSelectTab('dashboard');
       setMenuMobileAberto(false);
       return;
     }
 
     if (id === 'usuarios' && !isAdmin) {
-      if (onAbrirLoginAdmin) {
-        onAbrirLoginAdmin();
-      } else {
-        onSelectTab(id);
-      }
       setMenuMobileAberto(false);
       return;
     }
@@ -198,8 +193,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </button>
 
-            {/* Botão Destaque Admin Geral / Portal Master Micro-SaaS */}
-            {isSuperAdmin ? (
+            {/* Botão Destaque Admin Geral / Portal Master Micro-SaaS (Exclusivo SuperAdmin) */}
+            {isSuperAdmin && (
               <button
                 id="btn-navbar-admin-geral"
                 type="button"
@@ -215,18 +210,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="hidden sm:inline">Admin Geral (SaaS)</span>
                 <span className="sm:hidden">Master</span>
               </button>
-            ) : (
-              <button
-                id="btn-navbar-login-admin"
-                type="button"
-                onClick={() => onAbrirLoginAdmin?.()}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 hover:border-amber-500/50 text-xs font-semibold transition cursor-pointer shrink-0"
-                title="Entrar como Administrador Geral do Micro-SaaS"
-              >
-                <Lock className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">Área Admin Geral</span>
-                <span className="sm:hidden">Admin</span>
-              </button>
             )}
 
             {/* Botão Nova OS em Destaque */}
@@ -240,8 +223,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="sm:hidden">OS</span>
             </button>
 
-            {/* Seletor de Empresa / Oficina Ativa (Multi-Tenant SaaS) */}
-            {oficinasDisponiveis.length > 0 && (
+            {/* Seletor de Empresa / Oficina Ativa (Super Admin pode alternar; Lojista vê apenas a sua própria loja fixa) */}
+            {isSuperAdmin ? (
               <div className="relative group shrink-0 hidden md:block">
                 <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-300">
                   <Building2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -259,26 +242,37 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </select>
                 </div>
               </div>
+            ) : (
+              oficinaAtiva && (
+                <div className="hidden md:flex items-center gap-1.5 bg-zinc-900/90 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-zinc-200 shrink-0">
+                  <Building2 className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                  <span className="font-bold truncate max-w-[120px] lg:max-w-[170px] text-zinc-100">
+                    {oficinaAtiva.nome}
+                  </span>
+                </div>
+              )
             )}
 
-            {/* Alternador de Usuário (Simulador Real de Perfis) */}
-            <div className="relative group shrink-0 hidden lg:block">
-              <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-300">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                <select
-                  aria-label="Alternar Usuário e Perfil"
-                  className="bg-transparent text-zinc-300 text-xs focus:outline-none cursor-pointer max-w-[100px] xl:max-w-[120px] truncate"
-                  value={usuarioAtual?.id || ''}
-                  onChange={(e) => trocarUsuario(e.target.value)}
-                >
-                  {usuariosDisponiveis.map((u) => (
-                    <option key={u.id} value={u.id} className="bg-zinc-900 text-zinc-100">
-                      {u.nome.split(' ')[0]} ({u.perfil === 'SUPERADMIN' ? 'SaaS' : u.perfil === 'ADMINISTRADOR' ? 'Admin' : 'Mec'})
-                    </option>
-                  ))}
-                </select>
+            {/* Alternador de Usuário (Exclusivo do SuperAdmin para testes) */}
+            {isSuperAdmin && (
+              <div className="relative group shrink-0 hidden lg:block">
+                <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-300">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <select
+                    aria-label="Alternar Usuário e Perfil"
+                    className="bg-transparent text-zinc-300 text-xs focus:outline-none cursor-pointer max-w-[100px] xl:max-w-[120px] truncate"
+                    value={usuarioAtual?.id || ''}
+                    onChange={(e) => trocarUsuario(e.target.value)}
+                  >
+                    {usuariosDisponiveis.map((u) => (
+                      <option key={u.id} value={u.id} className="bg-zinc-900 text-zinc-100">
+                        {u.nome.split(' ')[0]} ({u.perfil === 'SUPERADMIN' ? 'SaaS' : u.perfil === 'ADMINISTRADOR' ? 'Admin' : 'Mec'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Botão de Cadastro do Lojista (quando for Administrador da loja) */}
             {usuarioAtual?.perfil === 'ADMINISTRADOR' && (
@@ -363,69 +357,93 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="xl:hidden fixed inset-x-0 top-24 bottom-0 z-50 bg-black/90 backdrop-blur-md p-4 overflow-y-auto animate-in fade-in">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-4 max-w-md mx-auto shadow-2xl">
             
-            {/* Seletor de Empresa e Perfil na Gaveta */}
+            {/* Seletor de Empresa e Perfil na Gaveta Mobile */}
             <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2.5">
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
-                  Empresa / Oficina Ativa
-                </label>
-                <select
-                  className="w-full bg-zinc-900 border border-zinc-700 text-white text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-red-500"
-                  value={oficinaAtiva?.id || ''}
-                  onChange={(e) => {
-                    selecionarOficina(e.target.value);
-                  }}
-                >
-                  {oficinasDisponiveis.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.nome}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
-                  Usuário Conectado
-                </label>
-                <select
-                  className="w-full bg-zinc-900 border border-zinc-700 text-white text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-red-500"
-                  value={usuarioAtual?.id || ''}
-                  onChange={(e) => trocarUsuario(e.target.value)}
-                >
-                  {usuariosDisponiveis.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.nome} ({u.perfil})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Banner de Acesso Rápido Admin Geral na Gaveta */}
-            <div className="p-3 bg-gradient-to-r from-amber-500/15 to-zinc-950 rounded-xl border border-amber-500/30 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Crown className="w-5 h-5 text-amber-400 shrink-0" />
+              {isSuperAdmin && oficinasDisponiveis.length > 0 ? (
                 <div>
-                  <p className="text-xs font-bold text-amber-300">Administração Geral (SaaS)</p>
-                  <p className="text-[10px] text-zinc-400">Gerenciar todas as oficinas e lojas</p>
+                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
+                    Empresa / Oficina Ativa (SaaS)
+                  </label>
+                  <select
+                    className="w-full bg-zinc-900 border border-zinc-700 text-white text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-red-500"
+                    value={oficinaAtiva?.id || ''}
+                    onChange={(e) => {
+                      selecionarOficina(e.target.value);
+                    }}
+                  >
+                    {oficinasDisponiveis.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.nome}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuMobileAberto(false);
-                  if (isSuperAdmin) {
-                    onSelectTab('admin_geral');
-                  } else {
-                    onAbrirLoginAdmin?.();
-                  }
-                }}
-                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer shrink-0"
-              >
-                {isSuperAdmin ? 'Abrir Painel' : 'Fazer Login'}
-              </button>
+              ) : (
+                oficinaAtiva && (
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-red-500 shrink-0" />
+                    <div>
+                      <span className="text-[10px] text-zinc-500 block uppercase font-bold">Oficina Conectada</span>
+                      <span className="text-white font-bold text-xs truncate block">{oficinaAtiva.nome}</span>
+                    </div>
+                  </div>
+                )
+              )}
+
+              {isSuperAdmin ? (
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
+                    Usuário Conectado
+                  </label>
+                  <select
+                    className="w-full bg-zinc-900 border border-zinc-700 text-white text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-red-500"
+                    value={usuarioAtual?.id || ''}
+                    onChange={(e) => trocarUsuario(e.target.value)}
+                  >
+                    {usuariosDisponiveis.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.nome} ({u.perfil})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                usuarioAtual && (
+                  <div className="pt-2 border-t border-zinc-800 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-zinc-500 block uppercase font-bold">Usuário</span>
+                      <span className="text-zinc-200 text-xs font-semibold">{usuarioAtual.nome}</span>
+                    </div>
+                    <span className="text-[10px] font-bold bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700">
+                      {usuarioAtual.perfil}
+                    </span>
+                  </div>
+                )
+              )}
             </div>
+
+            {/* Banner de Acesso Rápido Admin Geral na Gaveta (Exclusivo SuperAdmin) */}
+            {isSuperAdmin && (
+              <div className="p-3 bg-gradient-to-r from-amber-500/15 to-zinc-950 rounded-xl border border-amber-500/30 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Crown className="w-5 h-5 text-amber-400 shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-amber-300">Administração Geral (SaaS)</p>
+                    <p className="text-[10px] text-zinc-400">Gerenciar todas as oficinas e lojas</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuMobileAberto(false);
+                    onSelectTab('admin_geral');
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer shrink-0"
+                >
+                  Abrir Painel
+                </button>
+              </div>
+            )}
 
             {/* Menu Completo de Páginas */}
             <div className="space-y-1">

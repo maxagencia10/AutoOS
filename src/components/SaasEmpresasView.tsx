@@ -164,7 +164,7 @@ export const SaasEmpresasView: React.FC = () => {
   };
 
   const montarTextoWhatsApp = (emp: OficinaConfig, user: Usuario | null, senhaCustom?: string) => {
-    const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app');
+    const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app');
     const emailUsar = user?.email || emp.email || '';
     const emailParam = emailUsar ? `&email=${encodeURIComponent(emailUsar)}` : '';
     const link = `${origin}/?login=1&oficina=${emp.id}${emailParam}`;
@@ -187,7 +187,7 @@ export const SaasEmpresasView: React.FC = () => {
   };
 
   const handleCopiarLink = (empId: string, emailUsar?: string) => {
-    const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app');
+    const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app');
     const emailParam = emailUsar ? `&email=${encodeURIComponent(emailUsar)}` : '';
     const link = `${origin}/?login=1&oficina=${empId}${emailParam}`;
     navigator.clipboard.writeText(link);
@@ -819,7 +819,7 @@ export const SaasEmpresasView: React.FC = () => {
                   <input
                     type="text"
                     readOnly
-                    value={`${urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app')}/?login=1&oficina=${empresaAcesso.id}${adminAcesso?.email ? `&email=${encodeURIComponent(adminAcesso.email)}` : ''}`}
+                    value={`${urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app')}/?login=1&oficina=${empresaAcesso.id}${adminAcesso?.email ? `&email=${encodeURIComponent(adminAcesso.email)}` : ''}`}
                     className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono select-all focus:outline-none"
                   />
                   <button

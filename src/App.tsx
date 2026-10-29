@@ -25,6 +25,7 @@ function MainApp() {
   const {
     isInstalado,
     isAutenticado,
+    isSuperAdmin,
     carregando,
     recarregarUsuarios,
     modalCadastroAdminLojaAberto,
@@ -33,12 +34,29 @@ function MainApp() {
   const [currentTab, setCurrentTab] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const savedTab = sessionStorage.getItem('autoos_current_tab');
-      if (savedTab) return savedTab;
+      if (savedTab && savedTab !== 'admin_geral' && savedTab !== 'empresas' && savedTab !== 'atualizacoes') {
+        return savedTab;
+      }
     }
-    return 'admin_geral'; // A página inicial padrão é a de Administração Geral
+    return 'dashboard';
   });
 
+  // Guardião de Rota: se o usuário não for Super Admin, bloqueia acesso a telas globais do Micro-SaaS
+  React.useEffect(() => {
+    if (!isSuperAdmin && (currentTab === 'admin_geral' || currentTab === 'empresas' || currentTab === 'atualizacoes')) {
+      handleSelectTab('dashboard');
+    }
+  }, [isSuperAdmin, currentTab]);
+
   const handleSelectTab = (tab: string) => {
+    // Se não for SuperAdmin, nunca permite acessar abas restritas de SaaS
+    if (!isSuperAdmin && (tab === 'admin_geral' || tab === 'empresas' || tab === 'atualizacoes')) {
+      setCurrentTab('dashboard');
+      try {
+        sessionStorage.setItem('autoos_current_tab', 'dashboard');
+      } catch {}
+      return;
+    }
     setCurrentTab(tab);
     try {
       sessionStorage.setItem('autoos_current_tab', tab);
@@ -181,7 +199,7 @@ function MainApp() {
           />
         )}
 
-        {currentTab === 'admin_geral' && (
+        {currentTab === 'admin_geral' && isSuperAdmin && (
           <AdminGeralView onVoltarParaOficina={() => handleSelectTab('dashboard')} />
         )}
 
@@ -223,7 +241,7 @@ function MainApp() {
           />
         )}
 
-        {currentTab === 'empresas' && (
+        {currentTab === 'empresas' && isSuperAdmin && (
           <SaasEmpresasView />
         )}
 
@@ -235,7 +253,7 @@ function MainApp() {
           <BackupView onVoltar={() => handleSelectTab('dashboard')} />
         )}
 
-        {currentTab === 'atualizacoes' && (
+        {currentTab === 'atualizacoes' && isSuperAdmin && (
           <AtualizacoesView onVoltar={() => handleSelectTab('dashboard')} />
         )}
       </main>

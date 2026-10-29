@@ -24,6 +24,9 @@ import {
   Sun,
   Moon,
   Monitor,
+  Globe,
+  AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import { OficinaConfig } from '../types';
 import { OficinaRepository } from '../services/dbRepository';
@@ -41,7 +44,7 @@ interface ConfiguracoesViewProps {
 }
 
 export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAtualizacoes, onVoltar }) => {
-  const { zerarParaNovaInstalacao, oficinaAtiva, recarregarOficinas } = useAuth();
+  const { zerarParaNovaInstalacao, oficinaAtiva, recarregarOficinas, urlBasePublica, setUrlBasePublica } = useAuth();
   const { themeMode, theme, setThemeMode } = useTheme();
   const [formData, setFormData] = useState<OficinaConfig>({
     id: 'oficina_config_1',
@@ -81,6 +84,19 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAt
   const [escritasThreshold, setEscritasThreshold] = useState<number>(32);
   const [processandoRemocao, setProcessandoRemocao] = useState<boolean>(false);
   const [buscandoCep, setBuscandoCep] = useState<boolean>(false);
+  const [dominioInput, setDominioInput] = useState(urlBasePublica);
+  const [salvouDominio, setSalvouDominio] = useState(false);
+
+  useEffect(() => {
+    setDominioInput(urlBasePublica);
+  }, [urlBasePublica]);
+
+  const handleSalvarDominio = (e: React.FormEvent) => {
+    e.preventDefault();
+    setUrlBasePublica(dominioInput);
+    setSalvouDominio(true);
+    setTimeout(() => setSalvouDominio(false), 3000);
+  };
 
   const handleBuscarCep = async (cepParaBuscar?: string) => {
     const cepAlvo = cepParaBuscar || formData.cep;
@@ -372,6 +388,55 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAt
             <span>Atualizar Sistema</span>
           </button>
         )}
+      </div>
+
+      {/* Card de Configuração do Domínio Oficial de Produção do Micro-SaaS */}
+      <div className="bg-gradient-to-r from-zinc-900 to-zinc-950 border border-blue-500/40 rounded-xl p-4 sm:p-5 shadow-lg space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Globe className="w-5 h-5 text-blue-400 shrink-0" />
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-white">Domínio Oficial de Produção do Micro-SaaS</h2>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-950 text-blue-300 border border-blue-800 font-mono">
+                  Vercel / Produção
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Endereço público oficial utilizado para gerar todos os links de login e envio via WhatsApp para as lojas e clientes.
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-3 py-1 rounded-lg shrink-0">
+            Ativo: {urlBasePublica}
+          </span>
+        </div>
+
+        <form onSubmit={handleSalvarDominio} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+          <input
+            type="text"
+            placeholder="https://auto-os-gold.vercel.app"
+            value={dominioInput}
+            onChange={(e) => setDominioInput(e.target.value)}
+            className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-3.5 py-2 text-xs sm:text-sm text-white font-mono focus:border-blue-500 focus:outline-none"
+          />
+          <button
+            type="submit"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded-lg text-xs font-bold transition cursor-pointer shrink-0"
+          >
+            {salvouDominio ? 'Domínio Salvo com Sucesso!' : 'Salvar Domínio Oficial'}
+          </button>
+        </form>
+
+        <div className="p-3 bg-zinc-950/80 rounded-lg border border-zinc-800 text-xs text-zinc-400 space-y-1">
+          <p className="font-semibold text-zinc-300 flex items-center gap-1.5">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Domínio configurado para: <strong className="text-amber-400 font-mono">https://auto-os-gold.vercel.app</strong></span>
+          </p>
+          <p className="leading-relaxed text-[11px] text-zinc-400">
+            Todos os links gerados para novas lojas e administradores já estão apontando diretamente para <strong>https://auto-os-gold.vercel.app</strong>. Se ao abrir no celular do cliente ainda aparecer <em>"Log in to Vercel"</em>, certifique-se de que no painel da Vercel (em <strong>Settings &gt; Deployment Protection</strong>) a opção <strong>Vercel Authentication</strong> está em <strong>Disabled</strong>.
+          </p>
+        </div>
       </div>
 
       <form onSubmit={handleSalvar} className="space-y-6 text-xs sm:text-sm">

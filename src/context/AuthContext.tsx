@@ -45,13 +45,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [carregando, setCarregando] = useState(true);
   const [isInstalado, setIsInstalado] = useState<boolean>(true);
   const [modalCadastroAdminLojaAberto, setModalCadastroAdminLojaAberto] = useState<boolean>(false);
+  
+  // Domínio oficial de produção configurado para https://auto-os-gold.vercel.app
+  const DOMINIO_OFICIAL_PADRAO = 'https://auto-os-gold.vercel.app';
+
   const [urlBasePublica, setUrlBasePublicaState] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const salva = localStorage.getItem('autoos_url_publica');
-      if (salva) return salva;
-      return window.location.origin;
+      if (salva && !salva.includes('seu-autoos') && !salva.includes('run.app') && !salva.includes('localhost')) {
+        return salva;
+      }
+      const origin = window.location.origin;
+      if (origin.includes('run.app') || origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('seu-autoos')) {
+        return DOMINIO_OFICIAL_PADRAO;
+      }
+      return origin || DOMINIO_OFICIAL_PADRAO;
     }
-    return 'https://seu-autoos.vercel.app';
+    return DOMINIO_OFICIAL_PADRAO;
   });
 
   const setUrlBasePublica = (url: string) => {
@@ -59,13 +69,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (limpa && !limpa.startsWith('http://') && !limpa.startsWith('https://')) {
       limpa = 'https://' + limpa;
     }
-    setUrlBasePublicaState(limpa || (typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app'));
+    const finalUrl = limpa || DOMINIO_OFICIAL_PADRAO;
+    setUrlBasePublicaState(finalUrl);
     if (typeof window !== 'undefined') {
-      if (limpa) {
-        localStorage.setItem('autoos_url_publica', limpa);
-      } else {
-        localStorage.removeItem('autoos_url_publica');
-      }
+      localStorage.setItem('autoos_url_publica', finalUrl);
     }
   };
 
@@ -98,6 +105,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const selecionarOficina = async (oficinaId: string) => {
+    // Se o usuário logado não for SUPERADMIN, ele não pode alternar para oficinas alheias
+    if (usuarioAtual && usuarioAtual.perfil !== 'SUPERADMIN' && usuarioAtual.oficina_id && usuarioAtual.oficina_id !== oficinaId) {
+      console.warn('Acesso restrito: usuário lojista não pode acessar outras lojas.');
+      return;
+    }
     const of = oficinasDisponiveis.find(o => o.id === oficinaId);
     if (of) {
       setOficinaAtiva(of);
@@ -160,13 +172,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (userSalvo) {
         setUsuarioAtual(userSalvo);
+        // Se usuário não for SUPERADMIN, amarra a oficina ativa exclusivamente à oficina dele!
+        if (userSalvo.perfil !== 'SUPERADMIN' && userSalvo.oficina_id) {
+          const ofUser = oficinas.find(o => o.id === userSalvo.oficina_id);
+          if (ofUser) {
+            setOficinaAtiva(ofUser);
+            localStorage.setItem('autoos_oficina_ativa_id', ofUser.id);
+          }
+        }
       } else if (list.length > 0) {
-        // Inicializa com Administrador Geral por padrão para que a página inicial seja a de administração
-        const admin = list.find(u => u.perfil === 'SUPERADMIN' && u.ativo) ||
-                      list.find(u => u.perfil === 'ADMINISTRADOR' && u.ativo) ||
-                      list[0];
-        setUsuarioAtual(admin);
-        if (admin) localStorage.setItem('autoos_usuario_sessao', admin.id);
+        // Se a URL especificou oficina, busca o administrador ou usuário desta oficina
+        let defaultUser: Usuario | undefined;
+        if (urlOficinaId) {
+          defaultUser = list.find(u => (u.oficina_id === urlOficinaId || u.oficina_id?.toLowerCase() === urlOficinaId.toLowerCase()) && u.ativo && u.perfil === 'ADMINISTRADOR') ||
+                        list.find(u => (u.oficina_id === urlOficinaId || u.oficina_id?.toLowerCase() === urlOficinaId.toLowerCase()) && u.ativo);
+        }
+        
+        // Se não veio oficina na URL e nem usuário salvo, só entra como SUPERADMIN se não for convite de oficina
+        if (!defaultUser && !urlOficinaId) {
+          defaultUser = list.find(u => u.perfil === 'SUPERADMIN' && u.ativo) ||
+                        list.find(u => u.perfil === 'ADMINISTRADOR' && u.ativo) ||
+                        list[0];
+        }
+
+        setUsuarioAtual(defaultUser || null);
+        if (defaultUser) {
+          localStorage.setItem('autoos_usuario_sessao', defaultUser.id);
+          if (defaultUser.perfil !== 'SUPERADMIN' && defaultUser.oficina_id) {
+            const ofUser = oficinas.find(o => o.id === defaultUser.oficina_id);
+            if (ofUser) {
+              setOficinaAtiva(ofUser);
+              localStorage.setItem('autoos_oficina_ativa_id', ofUser.id);
+            }
+          }
+        }
       } else {
         setUsuarioAtual(null);
       }

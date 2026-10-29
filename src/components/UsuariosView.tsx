@@ -45,6 +45,12 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
     urlBasePublica,
   } = useAuth();
 
+  const usuariosExibidos = isSuperAdmin
+    ? usuariosDisponiveis
+    : usuariosDisponiveis.filter(
+        (u) => (u.oficina_id === oficinaAtiva?.id || !u.oficina_id) && u.perfil !== 'SUPERADMIN'
+      );
+
   const [modalOpen, setModalOpen] = useState(false);
   const [usuarioEditando, setUsuarioEditando] = useState<Usuario | null>(null);
   const [formData, setFormData] = useState({
@@ -141,10 +147,16 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
     setSalvando(true);
     setErro('');
     try {
+      const dadosSalvar = {
+        ...formData,
+        oficina_id: !isSuperAdmin ? (oficinaAtiva?.id || formData.oficina_id) : formData.oficina_id,
+        perfil: !isSuperAdmin && formData.perfil === 'SUPERADMIN' ? ('ADMINISTRADOR' as PerfilUsuario) : formData.perfil,
+      };
+
       if (usuarioEditando) {
-        await UsuarioRepository.update(usuarioEditando.id, formData);
+        await UsuarioRepository.update(usuarioEditando.id, dadosSalvar);
       } else {
-        await UsuarioRepository.create(formData);
+        await UsuarioRepository.create(dadosSalvar);
       }
       await recarregarUsuarios();
       setModalOpen(false);
@@ -172,7 +184,7 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
 
   const enviarAcessoWhatsApp = (u: Usuario) => {
     const of = oficinasDisponiveis.find((o) => o.id === u.oficina_id) || oficinaAtiva;
-    const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app');
+    const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app');
     const link = `${origin}/?login=1&oficina=${u.oficina_id || of?.id || ''}&email=${encodeURIComponent(u.email)}`;
     const msg =
       `🚗🔧 *SEU ACESSO - AUTOOS OFICINAS*\n\n` +
@@ -195,7 +207,7 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
 
   const copiarAcesso = (u: Usuario) => {
     const of = oficinasDisponiveis.find((o) => o.id === u.oficina_id) || oficinaAtiva;
-    const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app');
+    const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app');
     const link = `${origin}/?login=1&oficina=${u.oficina_id || of?.id || ''}&email=${encodeURIComponent(u.email)}`;
     const msg =
       `🚗🔧 *ACESSO AUTOOS*\n` +
@@ -264,33 +276,6 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
         </div>
       </div>
 
-      {/* Banner de Promoção para Super Admin caso o usuário ainda não seja */}
-      {!isSuperAdmin && (
-        <div className="bg-gradient-to-r from-amber-950/60 via-purple-950/60 to-zinc-900 border border-amber-500/40 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-              <Crown className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-bold text-white text-sm flex items-center gap-1.5">
-                <span>Deseja gerenciar todas as oficinas como Administrador Geral?</span>
-              </h3>
-              <p className="text-xs text-zinc-300 mt-0.5">
-                Ative seu perfil como <strong>SUPERADMIN</strong> para poder ver todas as oficinas cadastradas, criar novos acessos e enviar credenciais no WhatsApp.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handlePromoverSuperAdmin}
-            disabled={promovendo}
-            className="px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-zinc-950 font-bold rounded-lg text-xs shadow-md transition shrink-0 cursor-pointer disabled:opacity-50"
-          >
-            {promovendo ? 'Ativando...' : '👑 Ativar Perfil Super Admin'}
-          </button>
-        </div>
-      )}
-
       {/* Tabela de Usuários */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-lg">
         <div className="overflow-x-auto">
@@ -306,7 +291,14 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/60">
-              {usuariosDisponiveis.map((u) => {
+              {usuariosExibidos.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-zinc-400">
+                    Nenhum usuário cadastrado para esta oficina.
+                  </td>
+                </tr>
+              ) : (
+                usuariosExibidos.map((u) => {
                 const isCurrent = u.id === usuarioAtual?.id;
                 const oficinaDesteUser = oficinasDisponiveis.find((o) => o.id === u.oficina_id);
                 return (
@@ -409,7 +401,7 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>
@@ -567,34 +559,51 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
                   onChange={(e) => setFormData({ ...formData, perfil: e.target.value as PerfilUsuario })}
                   className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 font-bold"
                 >
-                  <option value="SUPERADMIN">👑 SUPERADMIN (Admin Geral - Gestão de Todas as Oficinas)</option>
+                  {isSuperAdmin && (
+                    <option value="SUPERADMIN">👑 SUPERADMIN (Admin Geral - Gestão de Todas as Oficinas)</option>
+                  )}
                   <option value="ADMINISTRADOR">🛡️ ADMINISTRADOR (Gestor da Oficina)</option>
                   <option value="MECANICO">🔧 MECÂNICO (Abertura, edição e execução de OS)</option>
                 </select>
               </div>
 
               {/* Vínculo de Oficina */}
-              {formData.perfil !== 'SUPERADMIN' ? (
-                <div>
-                  <label className="block text-zinc-300 font-semibold mb-1">
-                    Oficina em que este Usuário atua *
-                  </label>
-                  <select
-                    value={formData.oficina_id}
-                    onChange={(e) => setFormData({ ...formData, oficina_id: e.target.value })}
-                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 text-xs"
-                  >
-                    {oficinasDisponiveis.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.nome} ({o.cidade || 'Matriz'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {isSuperAdmin ? (
+                formData.perfil !== 'SUPERADMIN' ? (
+                  <div>
+                    <label className="block text-zinc-300 font-semibold mb-1">
+                      Oficina em que este Usuário atua *
+                    </label>
+                    <select
+                      value={formData.oficina_id}
+                      onChange={(e) => setFormData({ ...formData, oficina_id: e.target.value })}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white focus:outline-none focus:border-red-500 text-xs"
+                    >
+                      {oficinasDisponiveis.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.nome} ({o.cidade || 'Matriz'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-lg bg-amber-950/40 border border-amber-800/40 text-amber-300 text-xs flex items-center gap-2">
+                    <Crown className="w-4 h-4 shrink-0 text-amber-400" />
+                    <span>Este perfil tem acesso global e ilimitado a todas as oficinas da plataforma.</span>
+                  </div>
+                )
               ) : (
-                <div className="p-2.5 rounded-lg bg-amber-950/40 border border-amber-800/40 text-amber-300 text-xs flex items-center gap-2">
-                  <Crown className="w-4 h-4 shrink-0 text-amber-400" />
-                  <span>Este perfil tem acesso global e ilimitado a todas as oficinas da plataforma.</span>
+                <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-lg flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] text-zinc-400 block font-medium">Oficina Vinculada</span>
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5 mt-0.5">
+                      <Building2 className="w-3.5 h-3.5 text-red-400" />
+                      {oficinaAtiva?.nome || 'Minha Oficina'}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded">
+                    Ativa
+                  </span>
                 </div>
               )}
 

@@ -258,58 +258,66 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
             </p>
           </div>
 
-          {/* Atalho de Usuários Cadastrados para Teste Rápido do Administrador Geral */}
-          {usuariosDisponiveis.length > 0 && (
-            <div className="pt-2 border-t border-zinc-800 space-y-2">
-              <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                <span className="font-semibold flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-amber-400" />
-                  Usuários criados (clique para testar):
-                </span>
-              </div>
-              <div className="space-y-1.5 max-h-36 overflow-y-auto scrollbar-thin">
-                {usuariosDisponiveis.map((u) => {
-                  const of = oficinasDisponiveis.find((o) => o.id === u.oficina_id);
-                  return (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => selecionarUsuarioAtalho(u.email, u.senha || 'auto123', u.oficina_id)}
-                      className="w-full text-left p-2 rounded-lg bg-zinc-950/80 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition flex items-center justify-between group cursor-pointer text-xs"
-                    >
-                      <div className="truncate mr-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-zinc-200 group-hover:text-white">
-                            {u.nome}
-                          </span>
-                          <span
-                            className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
-                              u.perfil === 'SUPERADMIN'
-                                ? 'bg-amber-500/20 text-amber-300'
-                                : u.perfil === 'ADMINISTRADOR'
-                                ? 'bg-blue-500/20 text-blue-300'
-                                : 'bg-zinc-700 text-zinc-300'
-                            }`}
-                          >
-                            {u.perfil}
-                          </span>
+          {/* Atalho de Usuários Cadastrados para Teste Rápido */}
+          {(() => {
+            const usuariosFiltrados = isAcessoLojistaConvite && oficinaAtiva
+              ? usuariosDisponiveis.filter((u) => u.oficina_id === oficinaAtiva.id && u.perfil !== 'SUPERADMIN')
+              : usuariosDisponiveis;
+
+            if (usuariosFiltrados.length === 0) return null;
+
+            return (
+              <div className="pt-2 border-t border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                  <span className="font-semibold flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    {isAcessoLojistaConvite ? 'Usuários desta oficina:' : 'Usuários criados (clique para testar):'}
+                  </span>
+                </div>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto scrollbar-thin">
+                  {usuariosFiltrados.map((u) => {
+                    const of = oficinasDisponiveis.find((o) => o.id === u.oficina_id);
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => selecionarUsuarioAtalho(u.email, u.senha || 'auto123', u.oficina_id)}
+                        className="w-full text-left p-2 rounded-lg bg-zinc-950/80 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition flex items-center justify-between group cursor-pointer text-xs"
+                      >
+                        <div className="truncate mr-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-zinc-200 group-hover:text-white">
+                              {u.nome}
+                            </span>
+                            <span
+                              className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                                u.perfil === 'SUPERADMIN'
+                                  ? 'bg-amber-500/20 text-amber-300'
+                                  : u.perfil === 'ADMINISTRADOR'
+                                  ? 'bg-blue-500/20 text-blue-300'
+                                  : 'bg-zinc-700 text-zinc-300'
+                              }`}
+                            >
+                              {u.perfil}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-zinc-400 truncate">
+                            {u.email} {of ? `• ${of.nome}` : ''}
+                          </p>
                         </div>
-                        <p className="text-[10px] text-zinc-400 truncate">
-                          {u.email} {of ? `• ${of.nome}` : ''}
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-bold text-red-400 group-hover:text-red-300 shrink-0">
-                        Usar
-                      </span>
-                    </button>
-                  );
-                })}
+                        <span className="text-[10px] font-bold text-red-400 group-hover:text-red-300 shrink-0">
+                          Usar
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Botão de Retorno ao Portal Master / Administrador Geral Micro-SaaS */}
-          {onIrParaAdminGeral && (
+          {onIrParaAdminGeral && !isAcessoLojistaConvite && (
             <div className="pt-2 border-t border-zinc-800">
               <button
                 type="button"

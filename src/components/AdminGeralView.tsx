@@ -72,7 +72,7 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
     usuariosDisponiveis.find((u) => u.oficina_id === oficinaAlvo?.id) ||
     usuariosDisponiveis[0];
 
-  const originUrl = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app');
+  const originUrl = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app');
   const emailParam = adminDestaOficina?.email ? `&email=${encodeURIComponent(adminDestaOficina.email)}` : '';
   const linkAcessoDireto = `${originUrl}/?login=1&oficina=${oficinaAlvo?.id || ''}${emailParam}`;
 
@@ -327,11 +327,11 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
                     <span>Certifique-se de Usar o Domínio Principal:</span>
                   </div>
                   <p className="text-zinc-300 text-[11px] leading-relaxed">
-                    Não envie links que contenham <code>-git-</code> ou códigos aleatórios no endereço (são links de preview protegidos). Envie sempre o seu domínio limpo de produção (ex: <code className="text-amber-400">meu-autoos.vercel.app</code> ou seu domínio próprio).
+                    Não envie links que contenham <code>-git-</code> ou códigos aleatórios no endereço (são links de preview protegidos). Envie sempre o seu domínio limpo de produção: <code className="text-amber-400 font-bold">https://auto-os-gold.vercel.app</code>.
                   </p>
                   <div className="pt-1">
                     <p className="text-[11px] text-zinc-400">
-                      Configure a URL oficial abaixo para que todos os links gerados saiam com o endereço correto!
+                      O sistema já está configurado com a sua URL oficial abaixo!
                     </p>
                   </div>
                 </div>
@@ -347,7 +347,7 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
                 <div>
                   <h3 className="text-sm font-bold text-white">Domínio Oficial de Produção do Micro-SaaS</h3>
                   <p className="text-[11px] text-zinc-400">
-                    Defina o link público oficial da sua plataforma (ex: <span className="font-mono text-zinc-300">https://meu-autoos.vercel.app</span> ou <span className="font-mono text-zinc-300">https://meudominio.com.br</span>).
+                    Defina o link público oficial da sua plataforma (configurado para <span className="font-mono text-amber-300 font-bold">https://auto-os-gold.vercel.app</span>).
                   </p>
                 </div>
               </div>
@@ -360,7 +360,7 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
               <div className="relative flex-1">
                 <input
                   type="text"
-                  placeholder="https://sua-oficina.vercel.app"
+                  placeholder="https://auto-os-gold.vercel.app"
                   value={urlInput}
                   onChange={(e) => setUrlInput(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-white font-mono focus:border-blue-500 focus:outline-none"
