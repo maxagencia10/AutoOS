@@ -33,7 +33,13 @@ import { OficinaRepository, OrdemServicoRepository, UsuarioRepository } from '..
 import { useAuth } from '../context/AuthContext';
 
 export const SaasEmpresasView: React.FC = () => {
-  const { oficinasDisponiveis, oficinaAtiva, selecionarOficina, recarregarOficinas } = useAuth();
+  const {
+    oficinasDisponiveis,
+    oficinaAtiva,
+    selecionarOficina,
+    recarregarOficinas,
+    testarLoginLojista,
+  } = useAuth();
   const [empresas, setEmpresas] = useState<OficinaConfig[]>([]);
   const [filtro, setFiltro] = useState('');
   const [modalAberta, setModalAberta] = useState(false);
@@ -158,28 +164,31 @@ export const SaasEmpresasView: React.FC = () => {
 
   const montarTextoWhatsApp = (emp: OficinaConfig, user: Usuario | null, senhaCustom?: string) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app';
-    const link = `${origin}/?oficina=${emp.id}`;
+    const emailUsar = user?.email || emp.email || '';
+    const emailParam = emailUsar ? `&email=${encodeURIComponent(emailUsar)}` : '';
+    const link = `${origin}/?login=1&oficina=${emp.id}${emailParam}`;
     const senhaUsar = senhaCustom || user?.senha || 'auto123';
-    const emailUsar = user?.email || emp.email || 'Não configurado';
     const resp = emp.responsavel_nome ? `Olá, *${emp.responsavel_nome}*!` : 'Olá!';
 
     return (
       `🚗🔧 *ACESSO LIBERADO - AUTOOS OFICINAS*\n\n` +
       `${resp} O sistema de gestão e Ordem de Serviço da sua oficina *${emp.nome}* já está liberado e ativo no Plano *${emp.plano || 'PRO'}*!\n\n` +
-      `🌐 *Link de Acesso Direto:*\n${link}\n\n` +
-      `👤 *Seu E-mail / Usuário:* ${emailUsar}\n` +
-      `🔑 *Sua Senha:* ${senhaUsar}\n\n` +
-      `📋 *Como usar:*\n` +
+      `🌐 *Link de Acesso Direto à Loja:*\n${link}\n\n` +
+      `👤 *Seu E-mail / Usuário:* ${emailUsar || 'Não configurado'}\n` +
+      `🔑 *Sua Senha Inicial:* ${senhaUsar}\n\n` +
+      `📋 *Como Acessar:*\n` +
       `1. Abra o link acima no seu celular ou computador.\n` +
-      `2. O sistema abrirá diretamente o painel exclusivo da sua oficina.\n` +
-      `3. Você já pode cadastrar clientes, veículos e emitir Ordens de Serviço completas com impressão A4 e envio no WhatsApp!\n\n` +
+      `2. O sistema abrirá a tela de login exclusiva da sua loja com o seu e-mail preenchido.\n` +
+      `3. Digite sua senha para entrar e logo em seguida confirme os dados do seu cadastro de administrador e da oficina.\n` +
+      `4. Pronto! Você já pode cadastrar clientes, veículos e emitir Ordens de Serviço completas!\n\n` +
       `Qualquer dúvida estamos à disposição!`
     );
   };
 
-  const handleCopiarLink = (empId: string) => {
+  const handleCopiarLink = (empId: string, emailUsar?: string) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app';
-    const link = `${origin}/?oficina=${empId}`;
+    const emailParam = emailUsar ? `&email=${encodeURIComponent(emailUsar)}` : '';
+    const link = `${origin}/?login=1&oficina=${empId}${emailParam}`;
     navigator.clipboard.writeText(link);
     setCopiadoLink(true);
     setTimeout(() => setCopiadoLink(false), 2500);
@@ -799,7 +808,7 @@ export const SaasEmpresasView: React.FC = () => {
               <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider">
-                    Link Direto com Auto-Conexão
+                    Link Direto com Login da Loja
                   </span>
                   <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
                     Oficina ID: {empresaAcesso.id}
@@ -809,11 +818,11 @@ export const SaasEmpresasView: React.FC = () => {
                   <input
                     type="text"
                     readOnly
-                    value={`${typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app'}/?oficina=${empresaAcesso.id}`}
+                    value={`${typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app'}/?login=1&oficina=${empresaAcesso.id}${adminAcesso?.email ? `&email=${encodeURIComponent(adminAcesso.email)}` : ''}`}
                     className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono select-all focus:outline-none"
                   />
                   <button
-                    onClick={() => handleCopiarLink(empresaAcesso.id)}
+                    onClick={() => handleCopiarLink(empresaAcesso.id, adminAcesso?.email)}
                     className="flex items-center gap-1 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-200 rounded-lg border border-zinc-700 transition font-semibold cursor-pointer shrink-0"
                     title="Copiar Link"
                   >
@@ -903,25 +912,37 @@ export const SaasEmpresasView: React.FC = () => {
 
             </div>
 
-            {/* Ações Inferiores - Enviar WhatsApp ou Copiar Mensagem */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-zinc-800 sticky bottom-0 bg-zinc-900/98 backdrop-blur-md z-10 shrink-0">
+            {/* Ações Inferiores - Enviar WhatsApp, Copiar Mensagem ou Testar Login */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-3 border-t border-zinc-800 sticky bottom-0 bg-zinc-900/98 backdrop-blur-md z-10 shrink-0">
               <button
                 type="button"
-                onClick={handleCopiarMensagemCompleta}
-                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-200 rounded-xl text-xs font-semibold transition border border-zinc-700 cursor-pointer"
+                onClick={() => testarLoginLojista(empresaAcesso.id, adminAcesso?.email)}
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-amber-500/20 hover:bg-amber-500/30 active:bg-amber-500/40 text-amber-300 hover:text-amber-200 rounded-xl text-xs font-bold transition border border-amber-500/40 cursor-pointer"
+                title="Desconecta do admin geral e abre a tela de login como esta loja para você testar"
               >
-                {copiadoMsg ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-zinc-300" />}
-                <span>{copiadoMsg ? 'Mensagem Copiada!' : 'Copiar Texto'}</span>
+                <Lock className="w-3.5 h-3.5" />
+                <span>Testar Login Desta Loja</span>
               </button>
 
-              <button
-                type="button"
-                onClick={handleEnviarWhatsApp}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-950 cursor-pointer"
-              >
-                <Send className="w-4 h-4" />
-                <span>Enviar no WhatsApp do Dono</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopiarMensagemCompleta}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-200 rounded-xl text-xs font-semibold transition border border-zinc-700 cursor-pointer"
+                >
+                  {copiadoMsg ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-zinc-300" />}
+                  <span>{copiadoMsg ? 'Copiado!' : 'Copiar Texto'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleEnviarWhatsApp}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-950 cursor-pointer"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Enviar no WhatsApp</span>
+                </button>
+              </div>
             </div>
 
           </div>

@@ -38,6 +38,7 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
     promoverParaSuperAdmin,
     sairAdminGeral,
     selecionarOficina,
+    testarLoginLojista,
   } = useAuth();
 
   const [abaInterna, setAbaInterna] = useState<'empresas' | 'usuarios' | 'guia_acessos' | 'status'>(
@@ -61,17 +62,22 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
     usuariosDisponiveis[0];
 
   const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app';
-  const linkAcessoDireto = `${originUrl}/?oficina=${oficinaAlvo?.id || ''}`;
+  const emailParam = adminDestaOficina?.email ? `&email=${encodeURIComponent(adminDestaOficina.email)}` : '';
+  const linkAcessoDireto = `${originUrl}/?login=1&oficina=${oficinaAlvo?.id || ''}${emailParam}`;
 
   const mensagemProntaWhatsApp =
     `🚗🔧 *BEM-VINDO AO AUTOOS - SEU ACESSO ESTÁ LIBERADO!*\n\n` +
     `Olá, *${adminDestaOficina?.nome || oficinaAlvo?.responsavel_nome || 'Gestor'}*!\n` +
-    `Seu acesso exclusivo para a unidade *${oficinaAlvo?.nome || 'Sua Loja'}* foi ativado com sucesso.\n\n` +
-    `🌐 *Link de Acesso Direto:*\n${linkAcessoDireto}\n\n` +
+    `Seu acesso exclusivo para a unidade *${oficinaAlvo?.nome || 'Sua Loja'}* foi ativado com sucesso no Plano *${oficinaAlvo?.plano || 'PRO'}*.\n\n` +
+    `🌐 *Link de Acesso Direto à Loja:*\n${linkAcessoDireto}\n\n` +
     `👤 *Usuário / Login:* ${adminDestaOficina?.email || oficinaAlvo?.email || 'admin'}\n` +
-    `🔑 *Senha Inicial:* ${adminDestaOficina?.senha || 'auto123'}\n` +
-    `📦 *Plano:* ${oficinaAlvo?.plano || 'PRO'}\n\n` +
-    `Basta clicar no link acima pelo celular ou computador para começar a emitir Ordens de Serviço e gerenciar sua loja!`;
+    `🔑 *Senha Inicial:* ${adminDestaOficina?.senha || 'auto123'}\n\n` +
+    `📋 *Passo a Passo de Acesso:*\n` +
+    `1. Clique no link acima pelo celular ou computador.\n` +
+    `2. A tela de login da sua loja abrirá com o seu e-mail preenchido.\n` +
+    `3. Digite sua senha inicial para acessar.\n` +
+    `4. Logo após entrar, confirme ou complete os dados do seu cadastro de administrador e da loja.\n` +
+    `5. Pronto! Você já terá controle total da oficina!`;
 
   const handleCopiarMensagem = () => {
     navigator.clipboard.writeText(mensagemProntaWhatsApp);
@@ -327,15 +333,15 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
                     <span>Enviar Diretamente no WhatsApp</span>
                   </button>
 
-                  <a
-                    href={linkAcessoDireto}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-medium border border-zinc-800 transition cursor-pointer ml-auto"
+                  <button
+                    type="button"
+                    onClick={() => testarLoginLojista(oficinaAlvo?.id, adminDestaOficina?.email)}
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-white text-xs font-bold border border-amber-500/40 transition cursor-pointer ml-auto"
+                    title="Desconecta da sessão master e abre a tela de login como esta loja"
                   >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Testar Link da Loja</span>
-                  </a>
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Testar Login Desta Loja</span>
+                  </button>
                 </div>
               </div>
             </div>

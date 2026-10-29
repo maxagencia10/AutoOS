@@ -22,6 +22,8 @@ import {
   Crown,
   Lock,
   LogOut,
+  Key,
+  Store,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -58,6 +60,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     oficinasDisponiveis,
     selecionarOficina,
     logout,
+    testarLoginLojista,
+    setModalCadastroAdminLojaAberto,
   } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [totalPacotesDisponiveis, setTotalPacotesDisponiveis] = useState<number>(0);
@@ -276,6 +280,31 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
 
+            {/* Botão de Cadastro do Lojista (quando for Administrador da loja) */}
+            {usuarioAtual?.perfil === 'ADMINISTRADOR' && (
+              <button
+                type="button"
+                onClick={() => setModalCadastroAdminLojaAberto(true)}
+                className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-600/15 hover:bg-red-600/25 text-red-300 border border-red-500/30 text-xs font-semibold transition cursor-pointer shrink-0"
+                title="Conferir ou alterar os dados do Administrador da Loja e endereço da oficina"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
+                <span className="hidden xl:inline">Cadastro da Loja</span>
+                <span className="xl:hidden">Minha Loja</span>
+              </button>
+            )}
+
+            {/* Botão Testar / Entrar como Lojista (para quem quer testar ou trocar de conta) */}
+            <button
+              type="button"
+              onClick={() => testarLoginLojista(oficinaAtiva?.id || '')}
+              className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 hover:border-amber-500/50 text-xs transition cursor-pointer shrink-0"
+              title="Abrir tela de login para entrar com usuário e senha do lojista"
+            >
+              <Key className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-[11px] font-semibold">Login Lojista</span>
+            </button>
+
             {/* Botão Sair / Logout */}
             <button
               type="button"
@@ -444,6 +473,31 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>Como Usar (Guia Passo a Passo)</span>
               </button>
             )}
+
+            {/* Ações de Lojista no Mobile */}
+            {usuarioAtual?.perfil === 'ADMINISTRADOR' && (
+              <button
+                onClick={() => {
+                  setMenuMobileAberto(false);
+                  setModalCadastroAdminLojaAberto(true);
+                }}
+                className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-red-600/15 border border-red-500/30 text-red-300 text-xs font-bold cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4 text-red-400" />
+                <span>Meu Cadastro de Lojista (Editar Loja e Senha)</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => {
+                setMenuMobileAberto(false);
+                testarLoginLojista(oficinaAtiva?.id || '');
+              }}
+              className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-amber-300 text-xs font-semibold cursor-pointer"
+            >
+              <Key className="w-4 h-4 text-amber-400" />
+              <span>Entrar / Fazer Login como Lojista</span>
+            </button>
 
             {/* Botão Sair / Logout Mobile */}
             <button

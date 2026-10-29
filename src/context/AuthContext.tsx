@@ -28,6 +28,9 @@ interface AuthContextType {
   podeGerenciarUsuarios: boolean;
   zerarParaNovaInstalacao: () => Promise<void>;
   definirUsuarioAposInstalacao: (admin: Usuario, redirecionarParaLogin?: boolean) => void;
+  testarLoginLojista: (oficinaId: string, email?: string) => void;
+  modalCadastroAdminLojaAberto: boolean;
+  setModalCadastroAdminLojaAberto: (aberto: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -39,6 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [oficinaAtiva, setOficinaAtiva] = useState<OficinaConfig | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [isInstalado, setIsInstalado] = useState<boolean>(true);
+  const [modalCadastroAdminLojaAberto, setModalCadastroAdminLojaAberto] = useState<boolean>(false);
 
   const verificarInstalacao = async (): Promise<boolean> => {
     try {
@@ -88,13 +92,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUsuariosDisponiveis(list);
       setOficinasDisponiveis(oficinas);
 
-      // 1. Verifica se há parâmetros de URL (?oficina=ID ou ?oficina_id=ID)
+      // 1. Verifica se há parâmetros de URL (?oficina=ID ou ?oficina_id=ID, ?login=1)
       let urlOficinaId: string | null = null;
       let urlUserId: string | null = null;
+      let urlForcarLogin: boolean = false;
       if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);
         urlOficinaId = urlParams.get('oficina') || urlParams.get('oficina_id') || urlParams.get('loja');
         urlUserId = urlParams.get('usuario') || urlParams.get('user');
+        urlForcarLogin = urlParams.get('login') === '1' || urlParams.get('auth') === '1' || urlParams.get('logout') === '1';
       }
 
       if (oficinas.length > 0) {
@@ -116,25 +122,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Se a URL especificou um usuário diretamente
-      if (urlUserId) {
-        const uAlvo = list.find(u => u.id === urlUserId || u.email.toLowerCase() === urlUserId?.toLowerCase());
-        if (uAlvo && uAlvo.ativo) {
-          setUsuarioAtual(uAlvo);
-          localStorage.setItem('autoos_usuario_sessao', uAlvo.id);
-          return;
-        }
-      }
-
-      // Se a URL especificou uma oficina, busca o administrador daquela oficina
-      if (urlOficinaId) {
-        const adminDaOficina = list.find(u => u.oficina_id === urlOficinaId && u.perfil === 'ADMINISTRADOR' && u.ativo) ||
-                               list.find(u => u.oficina_id === urlOficinaId && u.ativo);
-        if (adminDaOficina) {
-          setUsuarioAtual(adminDaOficina);
-          localStorage.setItem('autoos_usuario_sessao', adminDaOficina.id);
-          return;
-        }
+      // Se a URL solicitou explicitamente a tela de login (?login=1), limpa sessão e exibe a tela de login
+      if (urlForcarLogin) {
+        setUsuarioAtual(null);
+        localStorage.removeItem('autoos_usuario_sessao');
+        return;
       }
 
       // Tenta recuperar sessão salva
@@ -327,6 +319,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const testarLoginLojista = (oficinaId: string, email?: string) => {
+    localStorage.removeItem('autoos_usuario_sessao');
+    setUsuarioAtual(null);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('login', '1');
+      url.searchParams.set('oficina', oficinaId);
+      if (email) {
+        url.searchParams.set('email', email);
+      }
+      window.history.pushState({}, '', url.toString());
+      const of = oficinasDisponiveis.find((o) => o.id === oficinaId);
+      if (of) setOficinaAtiva(of);
+    }
+  };
+
   const isAutenticado = !!usuarioAtual;
   const isSuperAdmin = usuarioAtual?.perfil === 'SUPERADMIN';
   const isAdmin = isSuperAdmin || 
@@ -362,6 +370,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         podeGerenciarUsuarios: isAdmin,
         zerarParaNovaInstalacao,
         definirUsuarioAposInstalacao,
+        testarLoginLojista,
+        modalCadastroAdminLojaAberto,
+        setModalCadastroAdminLojaAberto,
       }}
     >
       {children}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Wrench,
   Lock,
@@ -13,20 +13,21 @@ import {
   Building2,
   Users,
   Sparkles,
-  HelpCircle,
   Crown,
+  Check,
+  Store,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { Usuario } from '../types';
 
 interface LoginViewProps {
-  onLoginSucesso?: () => void;
+  onLoginSucesso?: (usuario: Usuario) => void;
   onIrParaAdminGeral?: () => void;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAdminGeral }) => {
   const {
     loginUsuario,
-    loginAdminGeral,
     usuariosDisponiveis,
     oficinasDisponiveis,
     oficinaAtiva,
@@ -40,8 +41,34 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
   const [erro, setErro] = useState('');
   const [sucessoMsg, setSucessoMsg] = useState('');
 
-  // Oficina selecionada no login (caso queira filtrar)
-  const [oficinaFiltro, setOficinaFiltro] = useState<string>(oficinaAtiva?.id || (oficinasDisponiveis[0]?.id || ''));
+  // Identifica parâmetros da URL (?oficina=ID, ?email=EMAIL, ?login=1)
+  const [oficinaUrlNome, setOficinaUrlNome] = useState<string | null>(null);
+  const [oficinaUrlPlano, setOficinaUrlPlano] = useState<string | null>(null);
+  const [isAcessoLojistaConvite, setIsAcessoLojistaConvite] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlOficina = params.get('oficina') || params.get('oficina_id') || params.get('loja');
+      const urlEmail = params.get('email') || params.get('usuario') || params.get('user');
+
+      if (urlEmail) {
+        setIdentificador(decodeURIComponent(urlEmail));
+      }
+
+      if (urlOficina) {
+        setIsAcessoLojistaConvite(true);
+        const ofAlvo = oficinasDisponiveis.find(
+          (o) => o.id === urlOficina || o.id.toLowerCase() === urlOficina.toLowerCase()
+        );
+        if (ofAlvo) {
+          setOficinaUrlNome(ofAlvo.nome);
+          setOficinaUrlPlano(ofAlvo.plano || 'PRO');
+          selecionarOficina(ofAlvo.id);
+        }
+      }
+    }
+  }, [oficinasDisponiveis]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,10 +83,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
 
     try {
       const res = await loginUsuario(identificador, senha);
-      if (res.sucesso) {
-        setSucessoMsg(`Bem-vindo, ${res.usuario?.nome || 'Usuário'}! Entrando no sistema...`);
+      if (res.sucesso && res.usuario) {
+        const user = res.usuario;
+        setSucessoMsg(`Bem-vindo, ${user.nome || 'Lojista'}! Entrando no sistema...`);
         setTimeout(() => {
-          if (onLoginSucesso) onLoginSucesso();
+          if (onLoginSucesso) onLoginSucesso(user);
         }, 500);
       } else {
         setErro(res.mensagem || 'Credenciais inválidas. Verifique seu e-mail e senha.');
@@ -75,11 +103,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
     setIdentificador(email);
     if (senhaPadrao) setSenha(senhaPadrao);
     if (oficinaId) {
-      setOficinaFiltro(oficinaId);
       selecionarOficina(oficinaId);
     }
     setErro('');
   };
+
+  // Identifica a oficina atual para exibição
+  const oficinaExibida =
+    oficinaAtiva ||
+    (oficinaUrlNome ? { nome: oficinaUrlNome, plano: oficinaUrlPlano || 'PRO' } : null);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-center items-center px-4 py-8 font-sans antialiased">
@@ -95,20 +127,37 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
               AUTO<span className="text-red-500">OS</span>
             </h1>
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-zinc-800 text-zinc-300 border border-zinc-700">
-              Acesso ao Sistema
+              Área de Login
             </span>
           </div>
           <p className="text-xs text-zinc-400 max-w-sm mx-auto">
-            {oficinaAtiva?.nome ? (
-              <span>Entrar na unidade: <strong className="text-zinc-200">{oficinaAtiva.nome}</strong></span>
-            ) : (
-              <span>Informe seu e-mail e senha para acessar ordens de serviço, clientes e oficinas.</span>
-            )}
+            Acesso ao sistema de gestão e Ordens de Serviço automotivas.
           </p>
         </div>
 
         {/* Card do Formulário de Login */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-5">
+          
+          {/* Banner de Loja / Oficina de Destino (quando o link vem de WhatsApp ou do painel) */}
+          {oficinaExibida?.nome && (
+            <div className="p-3 bg-red-950/40 border border-red-800/50 rounded-xl flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Store className="w-4 h-4 text-red-400 shrink-0" />
+                <div className="truncate">
+                  <span className="text-[10px] uppercase font-bold text-red-400 block tracking-wider">
+                    Acesso à Loja
+                  </span>
+                  <span className="text-xs font-bold text-white truncate block">
+                    {oficinaExibida.nome}
+                  </span>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-zinc-300 rounded border border-zinc-700 shrink-0">
+                {oficinaExibida.plano || 'PRO'}
+              </span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             {erro && (
               <div className="p-3 bg-red-950/60 border border-red-800/80 rounded-xl flex items-start gap-2.5 text-xs text-red-200 animate-in fade-in">
@@ -130,8 +179,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
             {/* E-mail / Identificador */}
             <div>
               <label className="block text-xs font-semibold text-zinc-300 mb-1.5 flex items-center justify-between">
-                <span>E-mail ou Usuário</span>
-                <span className="text-[11px] text-zinc-500 font-normal">Cadastrado na oficina</span>
+                <span>E-mail do Administrador ou Usuário</span>
+                <span className="text-[11px] text-zinc-500 font-normal">Enviado no WhatsApp</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
@@ -140,10 +189,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
                 <input
                   type="text"
                   required
-                  autoFocus
+                  autoFocus={!identificador}
                   value={identificador}
                   onChange={(e) => setIdentificador(e.target.value)}
-                  placeholder="admin@oficina.com"
+                  placeholder="admin@sualoja.com"
                   className="w-full pl-9 pr-3 py-2.5 bg-zinc-950 border border-zinc-700 rounded-xl text-white text-xs sm:text-sm focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition placeholder:text-zinc-600"
                 />
               </div>
@@ -153,7 +202,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
             <div>
               <label className="block text-xs font-semibold text-zinc-300 mb-1.5 flex items-center justify-between">
                 <span>Senha de Acesso</span>
-                <span className="text-[11px] text-zinc-500 font-normal">Criada na instalação</span>
+                <span className="text-[11px] text-zinc-500 font-normal">Senha inicial enviada</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
@@ -162,6 +211,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
                 <input
                   type={mostrarSenha ? 'text' : 'password'}
                   required
+                  autoFocus={!!identificador}
                   value={senha}
                   onChange={(e) => setSenha(e.target.value)}
                   placeholder="••••••••"
@@ -187,26 +237,35 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
               {carregando ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Acessando...</span>
+                  <span>Autenticando...</span>
                 </>
               ) : (
                 <>
-                  <span>Entrar no Sistema</span>
+                  <span>Entrar e Abrir Cadastro da Loja</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
 
-          {/* Atalho de Usuários Cadastrados para Teste e Primeiro Acesso */}
+          {/* Dica para primeiro acesso */}
+          <div className="text-[11px] text-zinc-400 bg-zinc-950/60 p-3 rounded-xl border border-zinc-800 text-center space-y-1">
+            <p className="font-semibold text-zinc-300">
+              Primeiro acesso à sua oficina?
+            </p>
+            <p className="text-zinc-500 leading-relaxed">
+              Utilize o e-mail e a senha temporária enviados pelo WhatsApp. Após o login, você poderá confirmar seus dados e definir sua senha pessoal.
+            </p>
+          </div>
+
+          {/* Atalho de Usuários Cadastrados para Teste Rápido do Administrador Geral */}
           {usuariosDisponiveis.length > 0 && (
-            <div className="pt-3 border-t border-zinc-800 space-y-2">
+            <div className="pt-2 border-t border-zinc-800 space-y-2">
               <div className="flex items-center justify-between text-[11px] text-zinc-400">
                 <span className="font-semibold flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-amber-400" />
-                  Usuários criados nesta base:
+                  Usuários criados (clique para testar):
                 </span>
-                <span className="text-zinc-500">clique para preencher</span>
               </div>
               <div className="space-y-1.5 max-h-36 overflow-y-auto scrollbar-thin">
                 {usuariosDisponiveis.map((u) => {
@@ -223,13 +282,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
                           <span className="font-semibold text-zinc-200 group-hover:text-white">
                             {u.nome}
                           </span>
-                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
-                            u.perfil === 'SUPERADMIN'
-                              ? 'bg-amber-500/20 text-amber-300'
-                              : u.perfil === 'ADMINISTRADOR'
-                              ? 'bg-blue-500/20 text-blue-300'
-                              : 'bg-zinc-700 text-zinc-300'
-                          }`}>
+                          <span
+                            className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                              u.perfil === 'SUPERADMIN'
+                                ? 'bg-amber-500/20 text-amber-300'
+                                : u.perfil === 'ADMINISTRADOR'
+                                ? 'bg-blue-500/20 text-blue-300'
+                                : 'bg-zinc-700 text-zinc-300'
+                            }`}
+                          >
                             {u.perfil}
                           </span>
                         </div>
@@ -247,7 +308,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
             </div>
           )}
 
-          {/* Botão para Acesso Master / Admin Geral Micro-SaaS */}
+          {/* Botão de Retorno ao Portal Master / Administrador Geral Micro-SaaS */}
           {onIrParaAdminGeral && (
             <div className="pt-2 border-t border-zinc-800">
               <button
@@ -264,7 +325,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
 
         {/* Rodapé Informativo */}
         <div className="text-center text-[11px] text-zinc-500 space-y-1">
-          <p>AutoOS • Gerenciamento profissional de Ordens de Serviço</p>
+          <p>AutoOS • Plataforma Multi-Lojas para Oficinas Mecânicas</p>
           <p className="text-zinc-600">PostgreSQL WASM local com persistência segura no navegador</p>
         </div>
 

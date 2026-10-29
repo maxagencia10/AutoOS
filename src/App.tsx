@@ -14,6 +14,7 @@ import { SaasEmpresasView } from './components/SaasEmpresasView';
 import { AdminGeralView } from './components/AdminGeralView';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { LoginView } from './components/LoginView';
+import { ModalCadastroAdminLoja } from './components/ModalCadastroAdminLoja';
 import { NovaOrdemServicoModal } from './components/NovaOrdemServicoModal';
 import { VisualizacaoOSModal } from './components/VisualizacaoOSModal';
 import { InstalacaoWizard } from './components/InstalacaoWizard';
@@ -21,7 +22,14 @@ import { GuiaPassoAPasso } from './components/GuiaPassoAPasso';
 import { Cliente, Veiculo, OrdemServico } from './types';
 
 function MainApp() {
-  const { isInstalado, isAutenticado, carregando, recarregarUsuarios } = useAuth();
+  const {
+    isInstalado,
+    isAutenticado,
+    carregando,
+    recarregarUsuarios,
+    modalCadastroAdminLojaAberto,
+    setModalCadastroAdminLojaAberto,
+  } = useAuth();
   const [currentTab, setCurrentTab] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const savedTab = sessionStorage.getItem('autoos_current_tab');
@@ -100,7 +108,15 @@ function MainApp() {
     return (
       <>
         <LoginView
-          onLoginSucesso={() => handleSelectTab('admin_geral')}
+          onLoginSucesso={(usuario) => {
+            if (usuario.perfil === 'SUPERADMIN') {
+              handleSelectTab('admin_geral');
+            } else {
+              handleSelectTab('dashboard');
+              // Abre imediatamente a parte de cadastro do usuário administrador da loja
+              setModalCadastroAdminLojaAberto(true);
+            }
+          }}
           onIrParaAdminGeral={() => setAdminLoginModalAberto(true)}
         />
         <AdminLoginModal
@@ -110,6 +126,11 @@ function MainApp() {
             handleSelectTab('admin_geral');
             setAdminLoginModalAberto(false);
           }}
+        />
+        <ModalCadastroAdminLoja
+          aberto={modalCadastroAdminLojaAberto}
+          onFechar={() => setModalCadastroAdminLojaAberto(false)}
+          onConcluido={() => handleSelectTab('dashboard')}
         />
       </>
     );
@@ -278,9 +299,16 @@ function MainApp() {
         aberto={adminLoginModalAberto}
         onFechar={() => setAdminLoginModalAberto(false)}
         onSucesso={() => {
-          setCurrentTab('admin_geral');
+          handleSelectTab('admin_geral');
           setAdminLoginModalAberto(false);
         }}
+      />
+
+      {/* Modal de Cadastro do Usuário Administrador da Loja */}
+      <ModalCadastroAdminLoja
+        aberto={modalCadastroAdminLojaAberto}
+        onFechar={() => setModalCadastroAdminLojaAberto(false)}
+        onConcluido={() => handleSelectTab('dashboard')}
       />
 
       {/* Rodapé do Sistema */}
