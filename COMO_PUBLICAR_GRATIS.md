@@ -17,7 +17,14 @@ A Vercel oferece hospedagem global ultrarrápida com certificado SSL (HTTPS) gra
    - O Vercel já detectará automaticamente as configurações através do arquivo `vercel.json` que preparamos.
    - Clique em **"Deploy"**.
 3. Em menos de 1 minuto, seu sistema estará no ar em um link gratuito (ex: `autoos-oficina.vercel.app`).
-4. **Domínio próprio (opcional):** Se tiver um domínio (ex: `oficinadoze.com.br`), você pode conectá-lo gratuitamente na aba *Settings > Domains*.
+4. **⚠️ OBRIGATÓRIO (Para não pedir login da Vercel para seus clientes):**
+   - Acesse seu painel da Vercel em [vercel.com/dashboard](https://vercel.com/dashboard).
+   - Clique no projeto do **AutoOS**.
+   - No menu superior, clique em **Settings** > e no menu à esquerda clique em **Deployment Protection**.
+   - Em **Vercel Authentication**, marque como **Disabled (Desativado)**.
+   - Clique em **Save**.
+   *(Isso garante que qualquer pessoa que receber o link pelo WhatsApp abra o sistema diretamente sem que a Vercel exija conta ou login).*
+5. **Domínio próprio (opcional):** Se tiver um domínio (ex: `oficinadoze.com.br`), você pode conectá-lo gratuitamente na aba *Settings > Domains*.
 
 ---
 

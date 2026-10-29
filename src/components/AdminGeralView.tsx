@@ -19,6 +19,12 @@ import {
   Settings,
   Database,
   ArrowLeft,
+  Globe,
+  AlertTriangle,
+  HelpCircle,
+  Info,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { SaasEmpresasView } from './SaasEmpresasView';
@@ -39,6 +45,8 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
     sairAdminGeral,
     selecionarOficina,
     testarLoginLojista,
+    urlBasePublica,
+    setUrlBasePublica,
   } = useAuth();
 
   const [abaInterna, setAbaInterna] = useState<'empresas' | 'usuarios' | 'guia_acessos' | 'status'>(
@@ -48,6 +56,9 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
     oficinasDisponiveis[0]?.id || ''
   );
   const [copiadoConvite, setCopiadoConvite] = useState(false);
+  const [urlInput, setUrlInput] = useState(urlBasePublica);
+  const [salvouUrl, setSalvouUrl] = useState(false);
+  const [expandirAjudaVercel, setExpandirAjudaVercel] = useState(true);
 
   const oficinaAlvo =
     oficinasDisponiveis.find((o) => o.id === oficinaSelecionadaParaConvite) ||
@@ -61,9 +72,16 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
     usuariosDisponiveis.find((u) => u.oficina_id === oficinaAlvo?.id) ||
     usuariosDisponiveis[0];
 
-  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app';
+  const originUrl = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app');
   const emailParam = adminDestaOficina?.email ? `&email=${encodeURIComponent(adminDestaOficina.email)}` : '';
   const linkAcessoDireto = `${originUrl}/?login=1&oficina=${oficinaAlvo?.id || ''}${emailParam}`;
+
+  const handleSalvarUrlBase = (e: React.FormEvent) => {
+    e.preventDefault();
+    setUrlBasePublica(urlInput);
+    setSalvouUrl(true);
+    setTimeout(() => setSalvouUrl(false), 3000);
+  };
 
   const mensagemProntaWhatsApp =
     `🚗🔧 *BEM-VINDO AO AUTOOS - SEU ACESSO ESTÁ LIBERADO!*\n\n` +
@@ -255,6 +273,108 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
       {/* Conteúdo da Aba 3: Como Enviar Acessos & Gerador de Convites */}
       {abaInterna === 'guia_acessos' && (
         <div className="space-y-6">
+
+          {/* ALERTA E GUIA RESOLUÇÃO VERCEL: Como desativar a tela de login da Vercel para o cliente */}
+          <div className="bg-amber-950/40 border border-amber-500/40 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                    <span>O link enviado pediu login na Vercel para o seu cliente?</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase font-bold">
+                      Solução Rápida
+                    </span>
+                  </h3>
+                  <p className="text-xs text-amber-200/80 mt-1 leading-relaxed">
+                    Por padrão, a Vercel ativa uma proteção chamada <strong>Deployment Protection / Vercel Authentication</strong> para projetos e links de visualização (Preview). Isso faz com que a Vercel exija login de quem abre o link. Veja como resolver em 30 segundos:
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setExpandirAjudaVercel(!expandirAjudaVercel)}
+                className="text-amber-400 hover:text-white p-1 rounded-lg hover:bg-amber-500/10 transition cursor-pointer shrink-0"
+                title={expandirAjudaVercel ? 'Recolher instruções' : 'Expandir instruções'}
+              >
+                {expandirAjudaVercel ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </button>
+            </div>
+
+            {expandirAjudaVercel && (
+              <div className="pt-3 border-t border-amber-500/20 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div className="bg-zinc-950/70 p-3.5 rounded-xl border border-amber-500/30 space-y-2">
+                  <div className="font-bold text-white flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-amber-500 text-zinc-950 text-xs flex items-center justify-center font-black">1</span>
+                    <span>Desativar Proteção na Vercel (Recomendado):</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1 text-zinc-300 text-[11px] leading-relaxed pl-1">
+                    <li>Acesse o painel da Vercel: <a href="https://vercel.com/dashboard" target="_blank" rel="noreferrer" className="text-amber-400 underline font-mono">vercel.com/dashboard</a></li>
+                    <li>Clique no projeto do <strong>AutoOS</strong>.</li>
+                    <li>No menu superior, vá em <strong>Settings</strong> (Configurações).</li>
+                    <li>No menu lateral esquerdo, clique em <strong>Deployment Protection</strong>.</li>
+                    <li>Em <strong>Vercel Authentication</strong>, altere para <strong>Disabled</strong> (Desativado).</li>
+                    <li>Clique no botão azul <strong>Save</strong>.</li>
+                  </ol>
+                </div>
+
+                <div className="bg-zinc-950/70 p-3.5 rounded-xl border border-amber-500/30 space-y-2">
+                  <div className="font-bold text-white flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-emerald-500 text-zinc-950 text-xs flex items-center justify-center font-black">2</span>
+                    <span>Certifique-se de Usar o Domínio Principal:</span>
+                  </div>
+                  <p className="text-zinc-300 text-[11px] leading-relaxed">
+                    Não envie links que contenham <code>-git-</code> ou códigos aleatórios no endereço (são links de preview protegidos). Envie sempre o seu domínio limpo de produção (ex: <code className="text-amber-400">meu-autoos.vercel.app</code> ou seu domínio próprio).
+                  </p>
+                  <div className="pt-1">
+                    <p className="text-[11px] text-zinc-400">
+                      Configure a URL oficial abaixo para que todos os links gerados saiam com o endereço correto!
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Configuração da URL Oficial de Produção */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <Globe className="w-5 h-5 text-blue-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-white">Domínio Oficial de Produção do Micro-SaaS</h3>
+                  <p className="text-[11px] text-zinc-400">
+                    Defina o link público oficial da sua plataforma (ex: <span className="font-mono text-zinc-300">https://meu-autoos.vercel.app</span> ou <span className="font-mono text-zinc-300">https://meudominio.com.br</span>).
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1 rounded-lg font-mono">
+                Ativo: {originUrl}
+              </span>
+            </div>
+
+            <form onSubmit={handleSalvarUrlBase} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="https://sua-oficina.vercel.app"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-white font-mono focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shrink-0"
+              >
+                {salvouUrl ? 'URL Salva com Sucesso!' : 'Salvar URL Oficial'}
+              </button>
+            </form>
+          </div>
+
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <Share2 className="w-5 h-5 text-amber-400" />

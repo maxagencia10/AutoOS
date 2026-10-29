@@ -42,6 +42,7 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
     oficinaAtiva,
     isSuperAdmin,
     promoverParaSuperAdmin,
+    urlBasePublica,
   } = useAuth();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -171,8 +172,8 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
 
   const enviarAcessoWhatsApp = (u: Usuario) => {
     const of = oficinasDisponiveis.find((o) => o.id === u.oficina_id) || oficinaAtiva;
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app';
-    const link = `${origin}/?oficina=${u.oficina_id || of?.id || ''}`;
+    const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app');
+    const link = `${origin}/?login=1&oficina=${u.oficina_id || of?.id || ''}&email=${encodeURIComponent(u.email)}`;
     const msg =
       `🚗🔧 *SEU ACESSO - AUTOOS OFICINAS*\n\n` +
       `Olá, *${u.nome}*! Seguem os dados para acessar o sistema da oficina *${of?.nome || 'Oficina'}*:\n\n` +
@@ -194,8 +195,8 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
 
   const copiarAcesso = (u: Usuario) => {
     const of = oficinasDisponiveis.find((o) => o.id === u.oficina_id) || oficinaAtiva;
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app';
-    const link = `${origin}/?oficina=${u.oficina_id || of?.id || ''}`;
+    const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app');
+    const link = `${origin}/?login=1&oficina=${u.oficina_id || of?.id || ''}&email=${encodeURIComponent(u.email)}`;
     const msg =
       `🚗🔧 *ACESSO AUTOOS*\n` +
       `Oficina: ${of?.nome || 'Oficina'}\n` +

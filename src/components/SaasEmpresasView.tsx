@@ -39,6 +39,7 @@ export const SaasEmpresasView: React.FC = () => {
     selecionarOficina,
     recarregarOficinas,
     testarLoginLojista,
+    urlBasePublica,
   } = useAuth();
   const [empresas, setEmpresas] = useState<OficinaConfig[]>([]);
   const [filtro, setFiltro] = useState('');
@@ -163,7 +164,7 @@ export const SaasEmpresasView: React.FC = () => {
   };
 
   const montarTextoWhatsApp = (emp: OficinaConfig, user: Usuario | null, senhaCustom?: string) => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app';
+    const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app');
     const emailUsar = user?.email || emp.email || '';
     const emailParam = emailUsar ? `&email=${encodeURIComponent(emailUsar)}` : '';
     const link = `${origin}/?login=1&oficina=${emp.id}${emailParam}`;
@@ -186,7 +187,7 @@ export const SaasEmpresasView: React.FC = () => {
   };
 
   const handleCopiarLink = (empId: string, emailUsar?: string) => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app';
+    const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app');
     const emailParam = emailUsar ? `&email=${encodeURIComponent(emailUsar)}` : '';
     const link = `${origin}/?login=1&oficina=${empId}${emailParam}`;
     navigator.clipboard.writeText(link);
@@ -818,7 +819,7 @@ export const SaasEmpresasView: React.FC = () => {
                   <input
                     type="text"
                     readOnly
-                    value={`${typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app'}/?login=1&oficina=${empresaAcesso.id}${adminAcesso?.email ? `&email=${encodeURIComponent(adminAcesso.email)}` : ''}`}
+                    value={`${urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app')}/?login=1&oficina=${empresaAcesso.id}${adminAcesso?.email ? `&email=${encodeURIComponent(adminAcesso.email)}` : ''}`}
                     className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono select-all focus:outline-none"
                   />
                   <button
@@ -830,6 +831,9 @@ export const SaasEmpresasView: React.FC = () => {
                     <span>{copiadoLink ? 'Copiado!' : 'Copiar'}</span>
                   </button>
                 </div>
+                <p className="text-[10px] text-amber-400/90 pt-1 leading-tight">
+                  ⚠️ <strong>Pediu login na Vercel?</strong> Vá em <em>Vercel &gt; Settings &gt; Deployment Protection</em> e desative o <em>Vercel Authentication</em> para que seus clientes acessem direto.
+                </p>
               </div>
 
               {/* Card dos Dados do Usuário / Senha */}

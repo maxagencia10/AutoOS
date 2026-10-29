@@ -31,6 +31,8 @@ interface AuthContextType {
   testarLoginLojista: (oficinaId: string, email?: string) => void;
   modalCadastroAdminLojaAberto: boolean;
   setModalCadastroAdminLojaAberto: (aberto: boolean) => void;
+  urlBasePublica: string;
+  setUrlBasePublica: (url: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,6 +45,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [carregando, setCarregando] = useState(true);
   const [isInstalado, setIsInstalado] = useState<boolean>(true);
   const [modalCadastroAdminLojaAberto, setModalCadastroAdminLojaAberto] = useState<boolean>(false);
+  const [urlBasePublica, setUrlBasePublicaState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const salva = localStorage.getItem('autoos_url_publica');
+      if (salva) return salva;
+      return window.location.origin;
+    }
+    return 'https://seu-autoos.vercel.app';
+  });
+
+  const setUrlBasePublica = (url: string) => {
+    let limpa = url.trim().replace(/\/+$/, '');
+    if (limpa && !limpa.startsWith('http://') && !limpa.startsWith('https://')) {
+      limpa = 'https://' + limpa;
+    }
+    setUrlBasePublicaState(limpa || (typeof window !== 'undefined' ? window.location.origin : 'https://seu-autoos.vercel.app'));
+    if (typeof window !== 'undefined') {
+      if (limpa) {
+        localStorage.setItem('autoos_url_publica', limpa);
+      } else {
+        localStorage.removeItem('autoos_url_publica');
+      }
+    }
+  };
 
   const verificarInstalacao = async (): Promise<boolean> => {
     try {
@@ -373,6 +398,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         testarLoginLojista,
         modalCadastroAdminLojaAberto,
         setModalCadastroAdminLojaAberto,
+        urlBasePublica,
+        setUrlBasePublica,
       }}
     >
       {children}
