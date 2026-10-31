@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Usuario } from '../types';
+import { extrairParametrosConvite, DadosConviteLoja } from '../utils/conviteSaaS';
 
 interface LoginViewProps {
   onLoginSucesso?: (usuario: Usuario) => void;
@@ -41,30 +42,43 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
   const [erro, setErro] = useState('');
   const [sucessoMsg, setSucessoMsg] = useState('');
 
-  // Identifica parâmetros da URL (?oficina=ID, ?email=EMAIL, ?login=1)
+  // Identifica parâmetros da URL (?oficina=ID, ?email=EMAIL, ?login=1, ?convite=TOKEN)
   const [oficinaUrlNome, setOficinaUrlNome] = useState<string | null>(null);
   const [oficinaUrlPlano, setOficinaUrlPlano] = useState<string | null>(null);
   const [isAcessoLojistaConvite, setIsAcessoLojistaConvite] = useState<boolean>(false);
+  const [conviteData, setConviteData] = useState<DadosConviteLoja | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const urlOficina = params.get('oficina') || params.get('oficina_id') || params.get('loja');
-      const urlEmail = params.get('email') || params.get('usuario') || params.get('user');
+      const { tokenData, urlOficina, urlEmail, urlSenha } = extrairParametrosConvite();
 
-      if (urlEmail) {
-        setIdentificador(decodeURIComponent(urlEmail));
-      }
-
-      if (urlOficina) {
+      if (tokenData) {
+        setConviteData(tokenData);
         setIsAcessoLojistaConvite(true);
-        const ofAlvo = oficinasDisponiveis.find(
-          (o) => o.id === urlOficina || o.id.toLowerCase() === urlOficina.toLowerCase()
-        );
-        if (ofAlvo) {
-          setOficinaUrlNome(ofAlvo.nome);
-          setOficinaUrlPlano(ofAlvo.plano || 'PRO');
-          selecionarOficina(ofAlvo.id);
+        setIdentificador(tokenData.email);
+        if (tokenData.senha) {
+          setSenha(tokenData.senha);
+        }
+        setOficinaUrlNome(tokenData.nome);
+        setOficinaUrlPlano(tokenData.plano || 'PRO');
+        selecionarOficina(tokenData.oid);
+      } else {
+        if (urlEmail) {
+          setIdentificador(urlEmail);
+        }
+        if (urlSenha) {
+          setSenha(urlSenha);
+        }
+        if (urlOficina) {
+          setIsAcessoLojistaConvite(true);
+          const ofAlvo = oficinasDisponiveis.find(
+            (o) => o.id === urlOficina || o.id.toLowerCase() === urlOficina.toLowerCase()
+          );
+          if (ofAlvo) {
+            setOficinaUrlNome(ofAlvo.nome);
+            setOficinaUrlPlano(ofAlvo.plano || 'PRO');
+            selecionarOficina(ofAlvo.id);
+          }
         }
       }
     }
@@ -72,7 +86,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!identificador.trim()) {
+    const idUsar = identificador.trim() || conviteData?.email || '';
+    if (!idUsar) {
       setErro('Informe seu e-mail ou nome de usuário cadastrado.');
       return;
     }
@@ -82,7 +97,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
     setSucessoMsg('');
 
     try {
-      const res = await loginUsuario(identificador, senha);
+      const res = await loginUsuario(idUsar, senha);
       if (res.sucesso && res.usuario) {
         const user = res.usuario;
         setSucessoMsg(`Bem-vindo, ${user.nome || 'Lojista'}! Entrando no sistema...`);
@@ -226,6 +241,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
                   {mostrarSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+
+              {conviteData?.senha && (
+                <div className="flex items-center justify-between text-[11px] pt-1">
+                  <span className="text-zinc-400">Senha recebida no WhatsApp:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSenha(conviteData.senha);
+                      setErro('');
+                    }}
+                    className="text-red-400 hover:text-red-300 font-mono font-bold cursor-pointer underline flex items-center gap-1"
+                  >
+                    <Key className="w-3 h-3" />
+                    Preencher "{conviteData.senha}"
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Botão Entrar */}

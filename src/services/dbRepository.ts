@@ -325,6 +325,19 @@ export const OficinaRepository = {
     return { oficina, adminUser };
   },
 
+  async garantirOficina(data: Partial<OficinaConfig>): Promise<OficinaConfig> {
+    if (!data.id) {
+      return await this.create(data);
+    }
+    const existente = await this.getById(data.id);
+    if (!existente) {
+      return await this.create(data);
+    }
+    // Se existir, atualiza com os dados recebidos
+    await this.update(data, data.id);
+    return (await this.getById(data.id))!;
+  },
+
   async update(config: Partial<OficinaConfig>, targetOficinaId?: string): Promise<void> {
     const idToUpdate = targetOficinaId || config.id;
     const current = idToUpdate ? (await this.getById(idToUpdate)) || (await this.get()) : await this.get();
@@ -507,6 +520,57 @@ export const UsuarioRepository = {
       ]
     );
     return (await this.getById(id))!;
+  },
+
+  async garantirUsuarioAdmin(dados: {
+    oficina_id: string;
+    nome: string;
+    email: string;
+    senha?: string;
+    telefone?: string;
+  }): Promise<Usuario> {
+    const todos = await this.getAll();
+    const emailLimpo = dados.email.trim().toLowerCase();
+    
+    // Procura por email ou por perfil ADMINISTRADOR nessa oficina
+    let user = todos.find((u) => u.email.toLowerCase() === emailLimpo);
+    if (!user && dados.oficina_id) {
+      user = todos.find((u) => u.oficina_id === dados.oficina_id && u.perfil === 'ADMINISTRADOR');
+    }
+
+    if (user) {
+      const atualizacoes: Partial<Usuario> = {};
+      if (dados.senha && user.senha !== dados.senha) {
+        atualizacoes.senha = dados.senha;
+      }
+      if (dados.oficina_id && user.oficina_id !== dados.oficina_id) {
+        atualizacoes.oficina_id = dados.oficina_id;
+      }
+      if (dados.nome && user.nome !== dados.nome) {
+        atualizacoes.nome = dados.nome;
+      }
+      if (dados.email && user.email.toLowerCase() !== emailLimpo) {
+        atualizacoes.email = emailLimpo;
+      }
+      if (dados.telefone && !user.telefone) {
+        atualizacoes.telefone = dados.telefone;
+      }
+      if (Object.keys(atualizacoes).length > 0) {
+        await this.update(user.id, atualizacoes);
+        return (await this.getById(user.id))!;
+      }
+      return user;
+    }
+
+    return await this.create({
+      oficina_id: dados.oficina_id || 'oficina_matriz',
+      nome: dados.nome || 'Administrador da Loja',
+      email: emailLimpo,
+      senha: dados.senha || 'auto123',
+      telefone: dados.telefone || '',
+      perfil: 'ADMINISTRADOR',
+      ativo: true,
+    });
   },
 
   async update(id: string, user: Partial<Usuario>): Promise<void> {

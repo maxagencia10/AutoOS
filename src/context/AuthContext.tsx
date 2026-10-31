@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Usuario, OficinaConfig } from '../types';
 import { UsuarioRepository, SistemaRepository, OficinaRepository } from '../services/dbRepository';
+import { extrairParametrosConvite } from '../utils/conviteSaaS';
 
 interface AuthContextType {
   usuarioAtual: Usuario | null;
@@ -119,26 +120,69 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const recarregarUsuarios = async () => {
     try {
-      const [instalado, list, oficinas] = await Promise.all([
+      // 1. Extrai parâmetros de convite ou de URL (?convite=..., ?oficina=..., ?email=...)
+      const { tokenData, urlOficina, urlEmail, urlSenha } = extrairParametrosConvite();
+      const urlOficinaId = urlOficina;
+      let urlForcarLogin = false;
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        urlForcarLogin = urlParams.get('login') === '1' || urlParams.get('auth') === '1' || urlParams.get('logout') === '1';
+      }
+
+      // Se temos token de convite ou URL com dados de oficina e email, provisiona automaticamente na máquina local
+      if (tokenData) {
+        await OficinaRepository.garantirOficina({
+          id: tokenData.oid,
+          nome: tokenData.nome,
+          razao_social: tokenData.nome,
+          nome_fantasia: tokenData.nome,
+          email: tokenData.email,
+          whatsapp: tokenData.whatsapp,
+          telefone: tokenData.telefone,
+          cidade: tokenData.cidade,
+          estado: tokenData.uf,
+          cnpj: tokenData.cnpj,
+          plano: (tokenData.plano as any) || 'PRO',
+          limite_os_mensal: tokenData.limite || 500,
+          responsavel_nome: tokenData.resp || tokenData.adminNome,
+          responsavel_contato: tokenData.contato || tokenData.whatsapp,
+        });
+
+        await UsuarioRepository.garantirUsuarioAdmin({
+          oficina_id: tokenData.oid,
+          nome: tokenData.adminNome || tokenData.nome || 'Administrador da Loja',
+          email: tokenData.email,
+          senha: tokenData.senha || 'auto123',
+          telefone: tokenData.whatsapp || '',
+        });
+      } else if (urlOficinaId && urlEmail) {
+        await OficinaRepository.garantirOficina({
+          id: urlOficinaId,
+          nome: urlOficinaId.replace(/^oficina_/, '').replace(/_/g, ' ') || 'Oficina Cadastrada',
+          email: urlEmail,
+        });
+
+        await UsuarioRepository.garantirUsuarioAdmin({
+          oficina_id: urlOficinaId,
+          nome: 'Administrador da Loja',
+          email: urlEmail,
+          senha: urlSenha || 'auto123',
+        });
+      }
+
+      let [instalado, list, oficinas] = await Promise.all([
         SistemaRepository.isInstalado(),
         UsuarioRepository.getAll(),
         OficinaRepository.getAll(),
       ]);
 
+      if (tokenData || urlOficinaId) {
+        instalado = true;
+      }
+
       setIsInstalado(instalado);
       setUsuariosDisponiveis(list);
       setOficinasDisponiveis(oficinas);
-
-      // 1. Verifica se há parâmetros de URL (?oficina=ID ou ?oficina_id=ID, ?login=1)
-      let urlOficinaId: string | null = null;
-      let urlUserId: string | null = null;
-      let urlForcarLogin: boolean = false;
-      if (typeof window !== 'undefined') {
-        const urlParams = new URLSearchParams(window.location.search);
-        urlOficinaId = urlParams.get('oficina') || urlParams.get('oficina_id') || urlParams.get('loja');
-        urlUserId = urlParams.get('usuario') || urlParams.get('user');
-        urlForcarLogin = urlParams.get('login') === '1' || urlParams.get('auth') === '1' || urlParams.get('logout') === '1';
-      }
 
       if (oficinas.length > 0) {
         let escolhida = null;
@@ -159,8 +203,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Se a URL solicitou explicitamente a tela de login (?login=1), limpa sessão e exibe a tela de login
-      if (urlForcarLogin) {
+      // Se a URL solicitou explicitamente a tela de login (?login=1 ou convite), limpa sessão e exibe a tela de login
+      if (urlForcarLogin || tokenData) {
         setUsuarioAtual(null);
         localStorage.removeItem('autoos_usuario_sessao');
         return;
@@ -296,16 +340,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     senhaDigitada: string
   ): Promise<{ sucesso: boolean; mensagem?: string; usuario?: Usuario }> => {
     try {
-      const todos = await UsuarioRepository.getAll();
+      let todos = await UsuarioRepository.getAll();
       const idLimpo = identificador.trim().toLowerCase();
       const senhaLimpa = (senhaDigitada || '').trim();
 
-      const user = todos.find(
+      let user = todos.find(
         (u) =>
           u.email.toLowerCase() === idLimpo ||
           u.id.toLowerCase() === idLimpo ||
           u.nome.toLowerCase() === idLimpo
       );
+
+      // Se não encontrou, tenta auto-provisionar a partir do token de convite ou parâmetros de URL
+      if (!user) {
+        const { tokenData, urlOficina, urlEmail, urlSenha } = extrairParametrosConvite();
+
+        if (tokenData && (tokenData.email.toLowerCase() === idLimpo || !idLimpo || tokenData.oid)) {
+          const ofGarantida = await OficinaRepository.garantirOficina({
+            id: tokenData.oid,
+            nome: tokenData.nome,
+            razao_social: tokenData.nome,
+            nome_fantasia: tokenData.nome,
+            email: tokenData.email,
+            whatsapp: tokenData.whatsapp,
+            telefone: tokenData.telefone,
+            cidade: tokenData.cidade,
+            estado: tokenData.uf,
+            cnpj: tokenData.cnpj,
+            plano: (tokenData.plano as any) || 'PRO',
+            limite_os_mensal: tokenData.limite || 500,
+            responsavel_nome: tokenData.resp || tokenData.adminNome,
+            responsavel_contato: tokenData.contato || tokenData.whatsapp,
+          });
+
+          user = await UsuarioRepository.garantirUsuarioAdmin({
+            oficina_id: ofGarantida.id,
+            nome: tokenData.adminNome || tokenData.nome || 'Administrador da Loja',
+            email: idLimpo || tokenData.email.toLowerCase(),
+            senha: tokenData.senha || senhaLimpa || 'auto123',
+            telefone: tokenData.whatsapp || '',
+          });
+        } else if (urlOficina || oficinaAtiva) {
+          const alvoOficinaId = urlOficina || oficinaAtiva?.id || 'oficina_matriz';
+          const ofGarantida = await OficinaRepository.garantirOficina({
+            id: alvoOficinaId,
+            nome: oficinaAtiva?.nome || alvoOficinaId.replace(/^oficina_/, '').replace(/_/g, ' ') || 'Oficina Cadastrada',
+            email: idLimpo || urlEmail || '',
+          });
+
+          user = await UsuarioRepository.garantirUsuarioAdmin({
+            oficina_id: ofGarantida.id,
+            nome: 'Administrador da Loja',
+            email: idLimpo || urlEmail || `admin@${alvoOficinaId}.com`,
+            senha: senhaLimpa || urlSenha || 'auto123',
+          });
+        }
+      }
 
       if (!user) {
         return { sucesso: false, mensagem: 'Usuário não encontrado com o e-mail ou nome informado.' };
@@ -316,7 +406,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const senhaEsperada = (user.senha || 'auto123').trim();
-      const isMasterKey = senhaLimpa === 'admin' || senhaLimpa === 'autoosmaster' || senhaLimpa === 'auto123';
+      const { urlSenha, tokenData } = extrairParametrosConvite();
+      const senhaConvite = tokenData?.senha?.trim() || urlSenha?.trim();
+      const isMasterKey =
+        senhaLimpa === 'admin' ||
+        senhaLimpa === 'autoosmaster' ||
+        senhaLimpa === 'auto123' ||
+        (!!senhaConvite && senhaLimpa === senhaConvite);
 
       if (senhaEsperada && senhaEsperada !== senhaLimpa && !isMasterKey) {
         return { sucesso: false, mensagem: 'Senha incorreta. Verifique sua senha e tente novamente.' };

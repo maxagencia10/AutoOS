@@ -31,6 +31,7 @@ import {
 import { OficinaConfig, PlanoSaaS, StatusEmpresa, Usuario } from '../types';
 import { OficinaRepository, OrdemServicoRepository, UsuarioRepository } from '../services/dbRepository';
 import { useAuth } from '../context/AuthContext';
+import { gerarTokenConvite } from '../utils/conviteSaaS';
 
 export const SaasEmpresasView: React.FC = () => {
   const {
@@ -163,19 +164,40 @@ export const SaasEmpresasView: React.FC = () => {
     }
   };
 
-  const montarTextoWhatsApp = (emp: OficinaConfig, user: Usuario | null, senhaCustom?: string) => {
+  const gerarLinkLoja = (emp: OficinaConfig, user: Usuario | null, senhaCustom?: string) => {
     const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app');
-    const emailUsar = user?.email || emp.email || '';
-    const emailParam = emailUsar ? `&email=${encodeURIComponent(emailUsar)}` : '';
-    const link = `${origin}/?login=1&oficina=${emp.id}${emailParam}`;
-    const senhaUsar = senhaCustom || user?.senha || 'auto123';
+    const emailUsar = (user?.email || emp.email || `admin@${emp.id}.com`).trim();
+    const senhaUsar = (senhaCustom || user?.senha || 'auto123').trim();
+    const token = gerarTokenConvite({
+      oid: emp.id,
+      nome: emp.nome,
+      email: emailUsar,
+      senha: senhaUsar,
+      adminNome: user?.nome || emp.responsavel_nome || emp.nome,
+      plano: emp.plano || 'PRO',
+      limite: emp.limite_os_mensal || 500,
+      whatsapp: emp.whatsapp || emp.telefone || '',
+      telefone: emp.telefone || '',
+      cidade: emp.cidade || '',
+      uf: emp.estado || 'SP',
+      cnpj: emp.cnpj || '',
+      resp: emp.responsavel_nome || '',
+      contato: emp.responsavel_contato || '',
+    });
+    return `${origin}/?login=1&oficina=${emp.id}&email=${encodeURIComponent(emailUsar)}&convite=${token}`;
+  };
+
+  const montarTextoWhatsApp = (emp: OficinaConfig, user: Usuario | null, senhaCustom?: string) => {
+    const emailUsar = (user?.email || emp.email || `admin@${emp.id}.com`).trim();
+    const senhaUsar = (senhaCustom || user?.senha || 'auto123').trim();
+    const link = gerarLinkLoja(emp, user, senhaUsar);
     const resp = emp.responsavel_nome ? `Olá, *${emp.responsavel_nome}*!` : 'Olá!';
 
     return (
       `🚗🔧 *ACESSO LIBERADO - AUTOOS OFICINAS*\n\n` +
       `${resp} O sistema de gestão e Ordem de Serviço da sua oficina *${emp.nome}* já está liberado e ativo no Plano *${emp.plano || 'PRO'}*!\n\n` +
       `🌐 *Link de Acesso Direto à Loja:*\n${link}\n\n` +
-      `👤 *Seu E-mail / Usuário:* ${emailUsar || 'Não configurado'}\n` +
+      `👤 *Seu E-mail / Usuário:* ${emailUsar}\n` +
       `🔑 *Sua Senha Inicial:* ${senhaUsar}\n\n` +
       `📋 *Como Acessar:*\n` +
       `1. Abra o link acima no seu celular ou computador.\n` +
@@ -187,9 +209,15 @@ export const SaasEmpresasView: React.FC = () => {
   };
 
   const handleCopiarLink = (empId: string, emailUsar?: string) => {
-    const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app');
-    const emailParam = emailUsar ? `&email=${encodeURIComponent(emailUsar)}` : '';
-    const link = `${origin}/?login=1&oficina=${empId}${emailParam}`;
+    const emp = empresas.find(e => e.id === empId) || (empresaAcesso?.id === empId ? empresaAcesso : null);
+    let link = '';
+    if (emp) {
+      link = gerarLinkLoja(emp, adminAcesso, novaSenhaInput || undefined);
+    } else {
+      const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app');
+      const emailParam = emailUsar ? `&email=${encodeURIComponent(emailUsar)}` : '';
+      link = `${origin}/?login=1&oficina=${empId}${emailParam}`;
+    }
     navigator.clipboard.writeText(link);
     setCopiadoLink(true);
     setTimeout(() => setCopiadoLink(false), 2500);
@@ -819,7 +847,7 @@ export const SaasEmpresasView: React.FC = () => {
                   <input
                     type="text"
                     readOnly
-                    value={`${urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app')}/?login=1&oficina=${empresaAcesso.id}${adminAcesso?.email ? `&email=${encodeURIComponent(adminAcesso.email)}` : ''}`}
+                    value={empresaAcesso ? gerarLinkLoja(empresaAcesso, adminAcesso, novaSenhaInput || undefined) : ''}
                     className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono select-all focus:outline-none"
                   />
                   <button
