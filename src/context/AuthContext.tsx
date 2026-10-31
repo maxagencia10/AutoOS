@@ -203,14 +203,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Se a URL solicitou explicitamente a tela de login (?login=1 ou convite), limpa sessão e exibe a tela de login
-      if (urlForcarLogin || tokenData) {
-        setUsuarioAtual(null);
-        localStorage.removeItem('autoos_usuario_sessao');
-        return;
-      }
-
-      // Tenta recuperar sessão salva
+      // 1. Tenta recuperar sessão salva ativa primeiro - se o usuário já estiver logado, NUNCA derruba a sessão!
       const sessaoId = localStorage.getItem('autoos_usuario_sessao');
       const userSalvo = sessaoId ? list.find(u => u.id === sessaoId && u.ativo) : null;
 
@@ -224,7 +217,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             localStorage.setItem('autoos_oficina_ativa_id', ofUser.id);
           }
         }
-      } else if (list.length > 0) {
+        return;
+      }
+
+      // Se a URL solicitou explicitamente a tela de login (?login=1 ou convite) e NÃO há sessão salva ativa
+      if (urlForcarLogin || tokenData) {
+        setUsuarioAtual(null);
+        localStorage.removeItem('autoos_usuario_sessao');
+        return;
+      }
         // Se a URL especificou oficina, busca o administrador ou usuário desta oficina
         let defaultUser: Usuario | undefined;
         if (urlOficinaId) {
@@ -250,9 +251,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
         }
-      } else {
-        setUsuarioAtual(null);
-      }
     } catch (err) {
       console.error('Erro ao carregar usuários:', err);
     } finally {
@@ -420,6 +418,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setUsuarioAtual(user);
       localStorage.setItem('autoos_usuario_sessao', user.id);
+
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
 
       if (user.oficina_id && user.perfil !== 'SUPERADMIN') {
         await selecionarOficina(user.oficina_id);

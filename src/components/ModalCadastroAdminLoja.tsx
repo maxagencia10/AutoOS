@@ -185,6 +185,16 @@ export const ModalCadastroAdminLoja: React.FC<ModalCadastroAdminLojaProps> = ({
         await OficinaRepository.update(updateDadosOficina, oficinaAtiva.id);
       }
 
+      if (usuarioAtual?.id) {
+        localStorage.setItem('autoos_usuario_sessao', usuarioAtual.id);
+      }
+      if (oficinaAtiva?.id) {
+        localStorage.setItem('autoos_oficina_ativa_id', oficinaAtiva.id);
+      }
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+
       await recarregarUsuarios();
       await recarregarOficinas();
 
@@ -192,7 +202,7 @@ export const ModalCadastroAdminLoja: React.FC<ModalCadastroAdminLojaProps> = ({
       setTimeout(() => {
         if (onConcluido) onConcluido();
         onFechar();
-      }, 1000);
+      }, 700);
     } catch (err: any) {
       setErro(err.message || 'Erro ao salvar dados do administrador e da loja.');
     } finally {
@@ -209,9 +219,12 @@ export const ModalCadastroAdminLoja: React.FC<ModalCadastroAdminLojaProps> = ({
         {/* Cabeçalho Elegante */}
         <div className="relative bg-gradient-to-r from-zinc-950 via-zinc-900 to-red-950/40 p-5 sm:p-6 border-b border-zinc-800 shrink-0">
           <button
-            onClick={onFechar}
+            onClick={() => {
+              if (onConcluido) onConcluido();
+              onFechar();
+            }}
             className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition cursor-pointer"
-            title="Fechar"
+            title="Fechar e ir para o Painel"
           >
             <X className="w-5 h-5" />
           </button>
@@ -528,7 +541,10 @@ export const ModalCadastroAdminLoja: React.FC<ModalCadastroAdminLojaProps> = ({
           <div className="flex items-center justify-between pt-3 border-t border-zinc-800 shrink-0">
             <button
               type="button"
-              onClick={onFechar}
+              onClick={() => {
+                if (onConcluido) onConcluido();
+                onFechar();
+              }}
               disabled={salvando}
               className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 rounded-xl text-xs font-semibold transition cursor-pointer"
             >
