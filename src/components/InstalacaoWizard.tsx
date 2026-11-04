@@ -401,7 +401,7 @@ export const InstalacaoWizard: React.FC<InstalacaoWizardProps> = ({ onInstalacao
                 <input
                   type="text"
                   required
-                  placeholder="Ex: IMPÉRIOS CAR - Mecânica em Geral"
+                  placeholder="Ex: Auto Mecânica Central - Serviços Automotivos"
                   value={oficina.nome}
                   onChange={(e) =>
                     setOficina({ ...oficina, nome: e.target.value, nome_fantasia: e.target.value })
@@ -416,7 +416,7 @@ export const InstalacaoWizard: React.FC<InstalacaoWizardProps> = ({ onInstalacao
                 </label>
                 <input
                   type="text"
-                  placeholder="Ex: Impérios Car Reparação Automotiva Ltda"
+                  placeholder="Ex: Auto Mecânica Central Especializada Ltda"
                   value={oficina.razao_social}
                   onChange={(e) => setOficina({ ...oficina, razao_social: e.target.value })}
                   className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-sm text-white focus:outline-none focus:border-red-500 transition"

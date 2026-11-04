@@ -570,7 +570,7 @@ export const SaasEmpresasView: React.FC = () => {
                   <input
                     type="text"
                     required
-                    placeholder="Ex: Impérios Car Mecânica Especializada"
+                    placeholder="Ex: Auto Mecânica Central Especializada"
                     value={nome}
                     onChange={(e) => setNome(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:border-red-500 focus:outline-none"
@@ -583,7 +583,7 @@ export const SaasEmpresasView: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ex: Impérios Car Ltda"
+                    placeholder="Ex: Auto Mecânica Central Ltda"
                     value={razaoSocial}
                     onChange={(e) => setRazaoSocial(e.target.value)}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:border-red-500 focus:outline-none"

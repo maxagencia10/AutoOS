@@ -383,7 +383,7 @@ export const VisualizacaoOSModal: React.FC<VisualizacaoOSModalProps> = ({
 
         {/* ========================================================================= */}
         {/* DOCUMENTO OFICIAL A4 PARA VISUALIZAÇÃO E IMPRESSÃO                       */}
-        {/* Layout idêntico ao modelo Impérios Car (Preto, Vermelho e Branco)         */}
+        {/* Layout oficial esportivo para oficinas mecânicas (Preto, Vermelho e Branco) */}
         {/* ========================================================================= */}
         <div className="overflow-y-auto overflow-x-auto flex-1 p-1 sm:p-4 print:p-0 bg-zinc-950/60 print:bg-white rounded-xl print:rounded-none shadow-xl print:shadow-none print:overflow-visible touch-pan-x">
           <div className="sm:hidden text-[10px] text-zinc-400 bg-zinc-900/90 px-2 py-1 rounded border border-zinc-800 mb-2 flex items-center justify-between no-print">

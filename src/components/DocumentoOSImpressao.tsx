@@ -53,7 +53,7 @@ export const DocumentoOSImpressao: React.FC<DocumentoOSProps> = ({ os, oficina }
       style={{ boxSizing: 'border-box' }}
     >
       {/* ========================================================================= */}
-      {/* 1. CABEÇALHO DO DOCUMENTO (BANNER OFICIAL IMPÉRIOS CAR CONFORME ANEXO)    */}
+      {/* 1. CABEÇALHO DO DOCUMENTO (BANNER OFICIAL DA OFICINA)                     */}
       {/* ========================================================================= */}
       <BannerCabecalhoOficial oficina={oficina} />
 
@@ -360,7 +360,7 @@ export const DocumentoOSImpressao: React.FC<DocumentoOSProps> = ({ os, oficina }
                 Responsável Técnico
               </div>
               <div className="text-xs sm:text-[13px] text-black font-normal mt-0.5">
-                {oficina?.nome_fantasia || 'Impérios Car'}
+                {oficina?.nome_fantasia || oficina?.nome || 'Oficina Mecânica'}
               </div>
             </div>
           </div>
@@ -399,25 +399,13 @@ export const DocumentoOSImpressao: React.FC<DocumentoOSProps> = ({ os, oficina }
             </div>
           </div>
 
-          {/* Lado Direito: Coroa Real Vermelha do Emblema Impérios Car */}
+          {/* Lado Direito: Selo Automotivo de Qualidade */}
           <div className="flex items-center gap-2">
-            <svg
-              viewBox="0 0 100 48"
-              className="w-10 sm:w-12 h-6 fill-[#ff1a26] text-[#ff1a26] drop-shadow-[0_2px_4px_rgba(255,0,0,0.5)]"
-            >
-              <path
-                d="M 12 42 L 6 16 L 28 28 L 50 8 L 72 28 L 94 16 L 88 42 Z"
-                fill="#ff1a26"
-                stroke="#ff4d5a"
-                strokeWidth="1.5"
-              />
-              <circle cx="6" cy="15" r="3.5" fill="#ff4d5a" />
-              <circle cx="28" cy="27" r="3" fill="#ff4d5a" />
-              <circle cx="50" cy="7" r="4.5" fill="#ff4d5a" />
-              <circle cx="72" cy="27" r="3" fill="#ff4d5a" />
-              <circle cx="94" cy="15" r="3.5" fill="#ff4d5a" />
-              <rect x="12" y="38" width="76" height="5" rx="1.5" fill="#ff1a26" />
-            </svg>
+            <div className="w-8 h-8 rounded-lg bg-red-600/30 border border-red-500/50 flex items-center justify-center shadow-[0_0_10px_rgba(220,38,38,0.4)]">
+              <svg viewBox="0 0 24 24" className="w-4 h-4 fill-[#ff2a38] text-[#ff2a38]">
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+              </svg>
+            </div>
           </div>
 
         </div>

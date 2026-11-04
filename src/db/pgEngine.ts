@@ -317,6 +317,43 @@ async function initializeDatabase(db: PGlite): Promise<void> {
       ]
     );
   }
+
+  // 4. Limpeza e sanitização automática de quaisquer dados legados com "Impérios Car"
+  try {
+    await db.query(`
+      UPDATE oficina 
+      SET 
+        nome = CASE 
+          WHEN nome ILIKE '%imperios%' THEN 'Auto Mecânica Especializada' 
+          ELSE nome 
+        END,
+        razao_social = CASE 
+          WHEN razao_social ILIKE '%imperios%' THEN 'Auto Mecânica Especializada Ltda' 
+          ELSE razao_social 
+        END,
+        nome_fantasia = CASE 
+          WHEN nome_fantasia ILIKE '%imperios%' THEN 'Auto Mecânica Especializada' 
+          ELSE nome_fantasia 
+        END,
+        email = CASE 
+          WHEN email ILIKE '%imperios%' THEN 'contato@autoos.com.br' 
+          ELSE email 
+        END,
+        cabecalho_logo = CASE 
+          WHEN cabecalho_logo ILIKE '%logo_imperios%' THEN NULL 
+          ELSE cabecalho_logo 
+        END
+      WHERE nome ILIKE '%imperios%' OR razao_social ILIKE '%imperios%' OR nome_fantasia ILIKE '%imperios%' OR email ILIKE '%imperios%' OR cabecalho_logo ILIKE '%logo_imperios%';
+    `);
+
+    await db.query(`
+      UPDATE ordens_servico 
+      SET usuario_responsavel_nome = 'Auto Mecânica' 
+      WHERE usuario_responsavel_nome ILIKE '%imperios%';
+    `);
+  } catch {
+    // Sanitização silenciosa
+  }
 }
 
 export async function seedInitialData(db: PGlite): Promise<void> {

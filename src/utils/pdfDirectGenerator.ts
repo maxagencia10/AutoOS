@@ -24,7 +24,7 @@ export function generateOSPDFVectorDirect(
   const contentWidth = pageWidth - margin * 2;
   let y = 14;
 
-  // 1. Cabeçalho Esportivo Oficial AutoOS / Impérios Car
+  // 1. Cabeçalho Esportivo Oficial AutoOS
   doc.setFillColor(18, 18, 22);
   doc.rect(margin, y, contentWidth, 28, 'F');
 
@@ -34,7 +34,7 @@ export function generateOSPDFVectorDirect(
   doc.rect(margin, y + 27, contentWidth, 1, 'F');
 
   // Nome da Oficina
-  const nomeOficina = (oficina?.nome_fantasia || oficina?.nome || 'IMPÉRIOS CAR - MECÂNICA EM GERAL').toUpperCase();
+  const nomeOficina = (oficina?.nome_fantasia || oficina?.nome || 'OFICINA MECÂNICA ESPECIALIZADA').toUpperCase();
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(255, 255, 255);

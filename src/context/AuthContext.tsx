@@ -180,6 +180,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         instalado = true;
       }
 
+      // Sanitização em tempo de execução para remover qualquer menção legada a Impérios Car
+      oficinas = oficinas.map(o => {
+        if (o.nome?.toLowerCase().includes('imperios') || o.nome_fantasia?.toLowerCase().includes('imperios') || o.razao_social?.toLowerCase().includes('imperios')) {
+          return {
+            ...o,
+            nome: o.nome.replace(/imp[eé]rios\s*car/gi, 'Auto Mecânica Especializada').trim(),
+            razao_social: o.razao_social ? o.razao_social.replace(/imp[eé]rios\s*car/gi, 'Auto Mecânica Especializada').trim() : 'Auto Mecânica Especializada Ltda',
+            nome_fantasia: o.nome_fantasia ? o.nome_fantasia.replace(/imp[eé]rios\s*car/gi, 'Auto Mecânica Especializada').trim() : 'Auto Mecânica Especializada',
+            email: o.email?.toLowerCase().includes('imperios') ? 'contato@autoos.com.br' : o.email,
+          };
+        }
+        return o;
+      });
+
       setIsInstalado(instalado);
       setUsuariosDisponiveis(list);
       setOficinasDisponiveis(oficinas);

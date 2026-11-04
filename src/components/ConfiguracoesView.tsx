@@ -544,7 +544,7 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAt
           </div>
         </div>
 
-        {/* Identidade Visual & Cabeçalho da Ordem de Serviço (Section Especial Impérios Car) */}
+        {/* Identidade Visual & Cabeçalho da Ordem de Serviço */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">
             <div className="flex items-center gap-2 text-white font-bold text-sm">
@@ -559,7 +559,7 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAt
           </div>
 
           <p className="text-zinc-400 text-xs leading-relaxed">
-            O cabeçalho integra de forma proporcional os 3 elementos: o <strong>Fundo automotivo</strong> (colmeia e aletas vermelhas), o <strong>Logotipo 3D</strong> (com coroa e velocímetro, com fundo removido) e as <strong>Escritas</strong> (WhatsApp, CNPJ, Endereço e Slogan com fundo preto removido).
+            O cabeçalho integra de forma proporcional os elementos da sua oficina: o <strong>Fundo automotivo</strong>, o <strong>Logotipo da sua oficina</strong> (com fundo removido para acabamento transparente) e as <strong>Escritas personalizadas</strong> (WhatsApp, CNPJ, Endereço e Slogan).
           </p>
 
           {/* Pré-visualização do Banner e da Barra Oficial */}
@@ -650,11 +650,18 @@ export const ConfiguracoesView: React.FC<ConfiguracoesViewProps> = ({ onIrParaAt
                 }}
                 title="Visualização com fundo transparente (quadriculado)"
               >
-                <img
-                  src={formData.cabecalho_logo || '/src/assets/images/logo_imperios_car_3d_1789346970772.jpg'}
-                  alt="Logo com fundo transparente"
-                  className="max-h-full max-w-full object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
-                />
+                {(formData.cabecalho_logo || formData.logo) ? (
+                  <img
+                    src={formData.cabecalho_logo || formData.logo}
+                    alt="Logo com fundo transparente"
+                    className="max-h-full max-w-full object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-zinc-500 text-[10px]">
+                    <ImageIcon className="w-5 h-5 mb-0.5 text-zinc-600" />
+                    <span>Nenhum logo enviado</span>
+                  </div>
+                )}
                 {processandoRemocao && (
                   <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-white text-[11px] font-semibold gap-1.5">
                     <Wand2 className="w-3.5 h-3.5 animate-spin text-red-500" />
