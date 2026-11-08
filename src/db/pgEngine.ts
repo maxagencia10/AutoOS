@@ -7,9 +7,45 @@ import {
   ORDENS_SERVICO_DEMO,
 } from './initialData';
 import { BackupMetadata } from '../types';
+import { verifyAndRecoverPostmasterPid } from './postmasterManager';
+export { verifyAndRecoverPostmasterPid };
 
 let pgInstance: PGlite | null = null;
 let isInitialized = false;
+let initPromise: Promise<PGlite> | null = null;
+
+/**
+ * Mutex Assíncrono com encadeamento de fila FIFO resiliente.
+ * Garante que operações e transações no PGlite (WASM) sejam rigorosamente serializadas,
+ * prevenindo colisões no protocolo interno e corrupção de concorrência.
+ */
+class AsyncMutex {
+  private queue: Promise<void> = Promise.resolve();
+
+  async runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    let release: () => void;
+    const waitPromise = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const currentQueue = this.queue;
+    this.queue = currentQueue.then(() => waitPromise, () => waitPromise);
+
+    await currentQueue;
+    try {
+      return await fn();
+    } finally {
+      release!();
+    }
+  }
+}
+
+export const dbMutex = new AsyncMutex();
+
+export interface TransactionClient {
+  query<T = any>(sql: string, params?: any[]): Promise<T[]>;
+  command(sql: string, params?: any[]): Promise<void>;
+  exec(sql: string): Promise<void>;
+}
 
 // SQL DDL para criação do schema PostgreSQL
 const SCHEMA_DDL = `
@@ -108,7 +144,7 @@ CREATE TABLE IF NOT EXISTS veiculos (
 CREATE TABLE IF NOT EXISTS ordens_servico (
     id VARCHAR(50) PRIMARY KEY,
     oficina_id VARCHAR(50) DEFAULT 'oficina_matriz',
-    numero INTEGER NOT NULL,
+    numero INTEGER NOT NULL UNIQUE,
     numero_formatado VARCHAR(20) NOT NULL,
     data VARCHAR(10) NOT NULL,
     hora VARCHAR(8) NOT NULL,
@@ -189,30 +225,76 @@ CREATE TABLE IF NOT EXISTS sistema_info (
 `;
 
 export async function getPgEngine(): Promise<PGlite> {
-  if (pgInstance) {
+  if (pgInstance && isInitialized && !pgInstance.closed) {
     return pgInstance;
   }
+  if (initPromise) {
+    return initPromise;
+  }
 
-  try {
-    // Tenta persistir no IndexedDB do navegador para manter os dados mesmo fechando a aba
-    if (typeof window !== 'undefined' && 'indexedDB' in window) {
-      pgInstance = new PGlite('idb://oficina_mecanica_pg_v1');
-    } else {
-      pgInstance = new PGlite();
+  initPromise = (async () => {
+    try {
+      if (!pgInstance || pgInstance.closed) {
+        if (typeof window !== 'undefined' && 'indexedDB' in window) {
+          try {
+            pgInstance = new PGlite('idb://oficina_mecanica_pg_v1');
+            await pgInstance.waitReady;
+          } catch (idbErr) {
+            console.warn('[AutoOS] Falha ao abrir PGlite no IndexedDB, usando em memória:', idbErr);
+            pgInstance = new PGlite();
+            await pgInstance.waitReady;
+          }
+        } else {
+          // Ambiente Node / Servidor / Testes
+          const customDataDir = process.env.AUTOOS_DATA_DIR;
+          if (customDataDir) {
+            await verifyAndRecoverPostmasterPid(customDataDir);
+            pgInstance = new PGlite(customDataDir);
+          } else {
+            pgInstance = new PGlite();
+          }
+          await pgInstance.waitReady;
+        }
+      }
+
+      if (!isInitialized) {
+        await initializeDatabase(pgInstance);
+        isInitialized = true;
+      }
+
+      return pgInstance;
+    } catch (err) {
+      console.error('[AutoOS] Falha crítica na inicialização do PGlite:', err);
+      // Limpeza de estado para permitir recuperação limpa em novas chamadas
+      pgInstance = null;
+      isInitialized = false;
+      initPromise = null;
+      throw err;
     }
-    await pgInstance.waitReady;
-  } catch (err) {
-    console.warn('Falha ao abrir PGlite no IndexedDB, usando em memória:', err);
-    pgInstance = new PGlite();
-    await pgInstance.waitReady;
-  }
+  })();
 
-  if (!isInitialized) {
-    await initializeDatabase(pgInstance);
-    isInitialized = true;
-  }
+  return initPromise;
+}
 
-  return pgInstance;
+/**
+ * Encerramento limpo e gracioso do engine PGlite.
+ * Aguarda operações pendentes na fila, fecha o banco e libera recursos.
+ */
+export async function closePgEngine(): Promise<void> {
+  await dbMutex.runExclusive(async () => {
+    if (pgInstance) {
+      try {
+        if (!pgInstance.closed) {
+          await pgInstance.close();
+        }
+      } catch (err) {
+        console.warn('[AutoOS] Aviso ao encerrar PGlite:', err);
+      }
+      pgInstance = null;
+      isInitialized = false;
+      initPromise = null;
+    }
+  });
 }
 
 async function initializeDatabase(db: PGlite): Promise<void> {
@@ -243,6 +325,7 @@ async function initializeDatabase(db: PGlite): Promise<void> {
     'ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cidade VARCHAR(100)',
     'ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS estado VARCHAR(2)',
     "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS senha VARCHAR(255) DEFAULT '123'",
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_ordens_servico_numero ON ordens_servico(numero)',
   ];
 
   for (const sql of migrations) {
@@ -459,16 +542,60 @@ export async function seedInitialData(db: PGlite): Promise<void> {
   }
 }
 
-// Wrapper seguro para consultas SQL
+// Wrapper seguro e isolado contra concorrência para consultas SQL
 export async function executeQuery<T = any>(sql: string, params: any[] = []): Promise<T[]> {
   const db = await getPgEngine();
-  const res = await db.query<T>(sql, params);
-  return res.rows;
+  return await dbMutex.runExclusive(async () => {
+    const res = await db.query<T>(sql, params);
+    return res.rows;
+  });
 }
 
 export async function executeCommand(sql: string, params: any[] = []): Promise<void> {
   const db = await getPgEngine();
-  await db.query(sql, params);
+  await dbMutex.runExclusive(async () => {
+    await db.query(sql, params);
+  });
+}
+
+/**
+ * Executa um bloco de operações atômicas dentro de uma transação PostgreSQL (BEGIN ... COMMIT / ROLLBACK).
+ * O dbMutex garante exclusividade absoluta sobre o motor PGlite durante todo o ciclo de vida da transação.
+ * Em caso de qualquer erro, um ROLLBACK é emitido imediatamente, garantindo que nenhuma transação fique aberta.
+ */
+export async function executeTransaction<T>(
+  callback: (client: TransactionClient) => Promise<T>
+): Promise<T> {
+  const db = await getPgEngine();
+  return await dbMutex.runExclusive(async () => {
+    await db.exec('BEGIN');
+
+    const txClient: TransactionClient = {
+      query: async <R = any>(sql: string, params: any[] = []) => {
+        const res = await db.query<R>(sql, params);
+        return res.rows;
+      },
+      command: async (sql: string, params: any[] = []) => {
+        await db.query(sql, params);
+      },
+      exec: async (sql: string) => {
+        await db.exec(sql);
+      },
+    };
+
+    try {
+      const result = await callback(txClient);
+      await db.exec('COMMIT');
+      return result;
+    } catch (error) {
+      try {
+        await db.exec('ROLLBACK');
+      } catch (rollbackErr) {
+        console.error('[AutoOS] Erro fatal durante ROLLBACK:', rollbackErr);
+      }
+      throw error;
+    }
+  });
 }
 
 // Geração de DUMP PostgreSQL completo (.SQL) pronto para `psql -U postgres -d oficina < backup.sql`
@@ -584,149 +711,152 @@ export async function generateJsonBackup(): Promise<{ metadata: BackupMetadata; 
   };
 }
 
-// Restauração a partir de JSON
+// Restauração a partir de JSON de forma 100% transacional e atômica
 export async function restoreFromJson(backupData: any): Promise<void> {
-  const db = await getPgEngine();
   const d = backupData.data || backupData;
 
   if (!d.oficina && !d.clientes) {
     throw new Error('Arquivo de backup inválido ou estrutura corrompida.');
   }
 
-  await db.exec(`
-    DELETE FROM itens_os;
-    DELETE FROM historico_status;
-    DELETE FROM ordens_servico;
-    DELETE FROM veiculos;
-    DELETE FROM clientes;
-    DELETE FROM usuarios;
-    DELETE FROM oficina;
-  `);
+  await executeTransaction(async (tx) => {
+    await tx.exec(`
+      DELETE FROM itens_os;
+      DELETE FROM historico_status;
+      DELETE FROM ordens_servico;
+      DELETE FROM veiculos;
+      DELETE FROM clientes;
+      DELETE FROM usuarios;
+      DELETE FROM oficina;
+    `);
 
-  // Restaura oficina
-  if (d.oficina && d.oficina.length > 0) {
-    for (const o of d.oficina) {
-      await db.query(
-        `INSERT INTO oficina VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
-        [
-          o.id, o.nome, o.razao_social, o.nome_fantasia, o.cnpj, o.telefone, o.whatsapp, o.email,
-          o.cep, o.logradouro, o.numero, o.complemento, o.bairro, o.cidade, o.estado, o.logo,
-          o.texto_institucional, o.texto_padrao_garantia, o.texto_padrao_condicoes,
-          o.created_at || new Date().toISOString(), o.updated_at || new Date().toISOString()
-        ]
-      );
+    // Restaura oficina
+    if (d.oficina && d.oficina.length > 0) {
+      for (const o of d.oficina) {
+        await tx.command(
+          `INSERT INTO oficina VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+          [
+            o.id, o.nome, o.razao_social, o.nome_fantasia, o.cnpj, o.telefone, o.whatsapp, o.email,
+            o.cep, o.logradouro, o.numero, o.complemento, o.bairro, o.cidade, o.estado, o.logo,
+            o.texto_institucional, o.texto_padrao_garantia, o.texto_padrao_condicoes,
+            o.created_at || new Date().toISOString(), o.updated_at || new Date().toISOString()
+          ]
+        );
+      }
     }
-  }
 
-  // Restaura usuários
-  if (d.usuarios) {
-    for (const u of d.usuarios) {
-      await db.query(
-        `INSERT INTO usuarios (id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro, cidade, estado, perfil, ativo, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
-        [
-          u.id,
-          u.oficina_id || 'oficina_matriz',
-          u.nome,
-          u.email,
-          u.senha || '123',
-          u.telefone || '',
-          u.cep || '',
-          u.logradouro || '',
-          u.numero || '',
-          u.bairro || '',
-          u.cidade || '',
-          u.estado || '',
-          u.perfil,
-          u.ativo ?? true,
-          u.created_at || new Date().toISOString(),
-          u.updated_at || new Date().toISOString(),
-        ]
-      );
+    // Restaura usuários
+    if (d.usuarios) {
+      for (const u of d.usuarios) {
+        await tx.command(
+          `INSERT INTO usuarios (id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro, cidade, estado, perfil, ativo, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+          [
+            u.id,
+            u.oficina_id || 'oficina_matriz',
+            u.nome,
+            u.email,
+            u.senha || '123',
+            u.telefone || '',
+            u.cep || '',
+            u.logradouro || '',
+            u.numero || '',
+            u.bairro || '',
+            u.cidade || '',
+            u.estado || '',
+            u.perfil,
+            u.ativo ?? true,
+            u.created_at || new Date().toISOString(),
+            u.updated_at || new Date().toISOString(),
+          ]
+        );
+      }
     }
-  }
 
-  // Restaura clientes
-  if (d.clientes) {
-    for (const c of d.clientes) {
-      await db.query(
-        `INSERT INTO clientes VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
-        [
-          c.id, c.oficina_id, c.nome, c.cpf_cnpj, c.telefone, c.whatsapp, c.email,
-          c.cep, c.logradouro, c.numero, c.complemento, c.bairro, c.cidade, c.estado,
-          c.created_at || new Date().toISOString(), c.updated_at || new Date().toISOString()
-        ]
-      );
+    // Restaura clientes
+    if (d.clientes) {
+      for (const c of d.clientes) {
+        await tx.command(
+          `INSERT INTO clientes VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+          [
+            c.id, c.oficina_id, c.nome, c.cpf_cnpj, c.telefone, c.whatsapp, c.email,
+            c.cep, c.logradouro, c.numero, c.complemento, c.bairro, c.cidade, c.estado,
+            c.created_at || new Date().toISOString(), c.updated_at || new Date().toISOString()
+          ]
+        );
+      }
     }
-  }
 
-  // Restaura veículos
-  if (d.veiculos) {
-    for (const v of d.veiculos) {
-      await db.query(
-        `INSERT INTO veiculos VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [v.id, v.cliente_id, v.veiculo, v.marca, v.ano, v.cor, v.placa, v.quilometragem, v.created_at || new Date().toISOString(), v.updated_at || new Date().toISOString()]
-      );
+    // Restaura veículos
+    if (d.veiculos) {
+      for (const v of d.veiculos) {
+        await tx.command(
+          `INSERT INTO veiculos VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [v.id, v.cliente_id, v.veiculo, v.marca, v.ano, v.cor, v.placa, v.quilometragem, v.created_at || new Date().toISOString(), v.updated_at || new Date().toISOString()]
+        );
+      }
     }
-  }
 
-  // Restaura ordens_servico
-  if (d.ordens_servico) {
-    for (const o of d.ordens_servico) {
-      await db.query(
-        `INSERT INTO ordens_servico VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-          $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
-          $33, $34, $35, $36, $37, $38
-        )`,
-        [
-          o.id, o.numero, o.numero_formatado, o.data, o.hora, o.cliente_id, o.veiculo_id,
-          o.cliente_nome, o.cliente_cpf_cnpj, o.cliente_telefone, o.cliente_whatsapp, o.cliente_email,
-          o.cliente_endereco, o.cliente_cep, o.veiculo_modelo, o.veiculo_marca, o.veiculo_ano,
-          o.veiculo_cor, o.veiculo_placa, o.quilometragem, o.quilometragem_anterior || 0,
-          o.reclamacao_cliente, o.diagnostico_avaliacao, o.subtotal, o.desconto, o.acrescimo,
-          o.total, o.forma_pagamento, o.observacoes, o.garantia, o.status,
-          o.motivo_cancelamento, o.cancelado_por_usuario, o.data_cancelamento,
-          o.usuario_responsavel_id, o.usuario_responsavel_nome, o.created_at || new Date().toISOString(), o.updated_at || new Date().toISOString()
-        ]
-      );
+    // Restaura ordens_servico
+    if (d.ordens_servico) {
+      for (const o of d.ordens_servico) {
+        await tx.command(
+          `INSERT INTO ordens_servico VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+            $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
+            $33, $34, $35, $36, $37, $38
+          )`,
+          [
+            o.id, o.numero, o.numero_formatado, o.data, o.hora, o.cliente_id, o.veiculo_id,
+            o.cliente_nome, o.cliente_cpf_cnpj, o.cliente_telefone, o.cliente_whatsapp, o.cliente_email,
+            o.cliente_endereco, o.cliente_cep, o.veiculo_modelo, o.veiculo_marca, o.veiculo_ano,
+            o.veiculo_cor, o.veiculo_placa, o.quilometragem, o.quilometragem_anterior || 0,
+            o.reclamacao_cliente, o.diagnostico_avaliacao, o.subtotal, o.desconto, o.acrescimo,
+            o.total, o.forma_pagamento, o.observacoes, o.garantia, o.status,
+            o.motivo_cancelamento, o.cancelado_por_usuario, o.data_cancelamento,
+            o.usuario_responsavel_id, o.usuario_responsavel_nome, o.created_at || new Date().toISOString(), o.updated_at || new Date().toISOString()
+          ]
+        );
+      }
     }
-  }
 
-  // Restaura itens_os
-  if (d.itens_os) {
-    for (const it of d.itens_os) {
-      await db.query(
-        `INSERT INTO itens_os VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [it.id, it.os_id, it.tipo, it.descricao, it.quantidade, it.valor_unitario, it.valor_total]
-      );
+    // Restaura itens_os
+    if (d.itens_os) {
+      for (const it of d.itens_os) {
+        await tx.command(
+          `INSERT INTO itens_os VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [it.id, it.os_id, it.tipo, it.descricao, it.quantidade, it.valor_unitario, it.valor_total]
+        );
+      }
     }
-  }
+  });
 }
 
 // Limpeza exclusiva de dados de demonstração (mantém oficina e usuários)
 export async function cleanDemoData(): Promise<void> {
-  const db = await getPgEngine();
-  await db.exec(`
-    DELETE FROM itens_os WHERE os_id IN ('os_001', 'os_002');
-    DELETE FROM ordens_servico WHERE id IN ('os_001', 'os_002');
-    DELETE FROM veiculos WHERE id IN ('veic_01', 'veic_02', 'veic_03');
-    DELETE FROM clientes WHERE id IN ('cli_01', 'cli_02', 'cli_03');
-  `);
+  await executeTransaction(async (tx) => {
+    await tx.exec(`
+      DELETE FROM itens_os WHERE os_id IN ('os_001', 'os_002');
+      DELETE FROM ordens_servico WHERE id IN ('os_001', 'os_002');
+      DELETE FROM veiculos WHERE id IN ('veic_01', 'veic_02', 'veic_03');
+      DELETE FROM clientes WHERE id IN ('cli_01', 'cli_02', 'cli_03');
+    `);
+  });
 }
 
 // Limpeza completa (Zerar Banco para Modo Nova Instalação)
 export async function wipeDatabaseClean(): Promise<void> {
-  const db = await getPgEngine();
-  await db.exec(`
-    DELETE FROM itens_os;
-    DELETE FROM historico_status;
-    DELETE FROM ordens_servico;
-    DELETE FROM veiculos;
-    DELETE FROM clientes;
-    DELETE FROM usuarios;
-    DELETE FROM oficina;
-  `);
+  await executeTransaction(async (tx) => {
+    await tx.exec(`
+      DELETE FROM itens_os;
+      DELETE FROM historico_status;
+      DELETE FROM ordens_servico;
+      DELETE FROM veiculos;
+      DELETE FROM clientes;
+      DELETE FROM usuarios;
+      DELETE FROM oficina;
+    `);
+  });
 }
 
 // Reset para dados de demonstração (quando solicitado pelo usuário)

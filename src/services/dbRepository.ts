@@ -1,4 +1,12 @@
-import { executeQuery, executeCommand, wipeDatabaseClean, resetDatabase, getPgEngine } from '../db/pgEngine';
+import {
+  executeQuery,
+  executeCommand,
+  executeTransaction,
+  TransactionClient,
+  wipeDatabaseClean,
+  resetDatabase,
+  getPgEngine,
+} from '../db/pgEngine';
 import {
   OficinaConfig,
   Usuario,
@@ -65,11 +73,9 @@ export const SistemaRepository = {
       texto_padrao_condicoes?: string;
     };
   }): Promise<{ adminUser: Usuario; oficinaConfig: OficinaConfig }> {
-    // 1. Garante que qualquer registro anterior seja limpo
-    await wipeDatabaseClean();
-
     const oficinaId = 'oficina_matriz';
     const agora = new Date().toISOString();
+    const adminId = 'admin_' + Date.now();
 
     const oficinaConfig: OficinaConfig = {
       id: oficinaId,
@@ -104,62 +110,74 @@ export const SistemaRepository = {
       updated_at: agora,
     };
 
-    // 2. Insere a Oficina
-    await executeCommand(
-      `INSERT INTO oficina (
-        id, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
-        cep, logradouro, numero, complemento, bairro, cidade, estado, logo,
-        banner_cabecalho, cabecalho_fundo, cabecalho_logo, cabecalho_escritas,
-        modo_cabecalho, texto_institucional, texto_padrao_garantia, texto_padrao_condicoes,
-        created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
-      [
-        oficinaConfig.id,
-        oficinaConfig.nome,
-        oficinaConfig.razao_social,
-        oficinaConfig.nome_fantasia,
-        oficinaConfig.cnpj,
-        oficinaConfig.telefone,
-        oficinaConfig.whatsapp,
-        oficinaConfig.email,
-        oficinaConfig.cep,
-        oficinaConfig.logradouro,
-        oficinaConfig.numero,
-        oficinaConfig.complemento,
-        oficinaConfig.bairro,
-        oficinaConfig.cidade,
-        oficinaConfig.estado,
-        oficinaConfig.logo,
-        oficinaConfig.banner_cabecalho,
-        oficinaConfig.cabecalho_fundo,
-        oficinaConfig.cabecalho_logo,
-        oficinaConfig.cabecalho_escritas,
-        oficinaConfig.modo_cabecalho,
-        oficinaConfig.texto_institucional,
-        oficinaConfig.texto_padrao_garantia,
-        oficinaConfig.texto_padrao_condicoes,
-        oficinaConfig.created_at,
-        oficinaConfig.updated_at,
-      ]
-    );
+    // Execução atômica e transacional: se houver falha, tudo é revertido via ROLLBACK
+    await executeTransaction(async (tx) => {
+      await tx.exec(`
+        DELETE FROM itens_os;
+        DELETE FROM historico_status;
+        DELETE FROM ordens_servico;
+        DELETE FROM veiculos;
+        DELETE FROM clientes;
+        DELETE FROM usuarios;
+        DELETE FROM oficina;
+      `);
 
-    // 3. Insere o Administrador Geral da Plataforma (SUPERADMIN)
-    const adminId = 'admin_' + Date.now();
-    await executeCommand(
-      `INSERT INTO usuarios (id, oficina_id, nome, email, senha, perfil, ativo, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        adminId,
-        oficinaId,
-        dados.admin.nome.trim(),
-        dados.admin.email.trim().toLowerCase(),
-        dados.admin.senha || 'admin',
-        'SUPERADMIN',
-        true,
-        agora,
-        agora,
-      ]
-    );
+      // 2. Insere a Oficina
+      await tx.command(
+        `INSERT INTO oficina (
+          id, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
+          cep, logradouro, numero, complemento, bairro, cidade, estado, logo,
+          banner_cabecalho, cabecalho_fundo, cabecalho_logo, cabecalho_escritas,
+          modo_cabecalho, texto_institucional, texto_padrao_garantia, texto_padrao_condicoes,
+          created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
+        [
+          oficinaConfig.id,
+          oficinaConfig.nome,
+          oficinaConfig.razao_social,
+          oficinaConfig.nome_fantasia,
+          oficinaConfig.cnpj,
+          oficinaConfig.telefone,
+          oficinaConfig.whatsapp,
+          oficinaConfig.email,
+          oficinaConfig.cep,
+          oficinaConfig.logradouro,
+          oficinaConfig.numero,
+          oficinaConfig.complemento,
+          oficinaConfig.bairro,
+          oficinaConfig.cidade,
+          oficinaConfig.estado,
+          oficinaConfig.logo,
+          oficinaConfig.banner_cabecalho,
+          oficinaConfig.cabecalho_fundo,
+          oficinaConfig.cabecalho_logo,
+          oficinaConfig.cabecalho_escritas,
+          oficinaConfig.modo_cabecalho,
+          oficinaConfig.texto_institucional,
+          oficinaConfig.texto_padrao_garantia,
+          oficinaConfig.texto_padrao_condicoes,
+          oficinaConfig.created_at,
+          oficinaConfig.updated_at,
+        ]
+      );
+
+      // 3. Insere o Administrador Geral da Plataforma (SUPERADMIN)
+      await tx.command(
+        `INSERT INTO usuarios (id, oficina_id, nome, email, senha, perfil, ativo, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          adminId,
+          oficinaId,
+          dados.admin.nome.trim(),
+          dados.admin.email.trim().toLowerCase(),
+          dados.admin.senha || 'admin',
+          'SUPERADMIN',
+          true,
+          agora,
+          agora,
+        ]
+      );
+    });
 
     const adminUser: Usuario = {
       id: adminId,
@@ -954,89 +972,108 @@ export const OrdemServicoRepository = {
   },
 
   async create(data: Omit<OrdemServico, 'id' | 'created_at' | 'updated_at'>): Promise<OrdemServico> {
-    const id = 'os_' + Date.now();
+    const id = 'os_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
     const now = new Date().toISOString();
 
-    // Recalcula totais rigidamente
-    const subtotal = data.itens.reduce((acc, it) => acc + (Number(it.quantidade) * Number(it.valor_unitario)), 0);
-    const desconto = Number(data.desconto) || 0;
-    const acrescimo = Number(data.acrescimo) || 0;
-    const total = Math.max(0, subtotal - desconto + acrescimo);
-
-    await executeCommand(
-      `INSERT INTO ordens_servico (
-        id, numero, numero_formatado, data, hora, cliente_id, veiculo_id,
-        cliente_nome, cliente_cpf_cnpj, cliente_telefone, cliente_whatsapp, cliente_email,
-        cliente_endereco, cliente_cep, veiculo_modelo, veiculo_marca, veiculo_ano,
-        veiculo_cor, veiculo_placa, quilometragem, quilometragem_anterior,
-        reclamacao_cliente, diagnostico_avaliacao, subtotal, desconto, acrescimo,
-        total, forma_pagamento, observacoes, garantia, status,
-        usuario_responsavel_id, usuario_responsavel_nome, created_at, updated_at
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-        $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
-        $33, $34, $35
-      )`,
-      [
-        id,
-        data.numero,
-        data.numero_formatado,
-        data.data,
-        data.hora,
-        data.cliente_id,
-        data.veiculo_id,
-        data.cliente_nome,
-        data.cliente_cpf_cnpj || '',
-        data.cliente_telefone || '',
-        data.cliente_whatsapp || '',
-        data.cliente_email || '',
-        data.cliente_endereco || '',
-        data.cliente_cep || '',
-        data.veiculo_modelo,
-        data.veiculo_marca,
-        Number(data.veiculo_ano),
-        data.veiculo_cor,
-        data.veiculo_placa,
-        Number(data.quilometragem),
-        Number(data.quilometragem_anterior || 0),
-        data.reclamacao_cliente,
-        data.diagnostico_avaliacao || '',
-        subtotal,
-        desconto,
-        acrescimo,
-        total,
-        data.forma_pagamento,
-        data.observacoes || '',
-        data.garantia || '',
-        data.status || 'ABERTA',
-        data.usuario_responsavel_id || 'user_admin',
-        data.usuario_responsavel_nome,
-        now,
-        now,
-      ]
-    );
-
-    // Salva itens da OS
-    for (const it of data.itens) {
-      const itemId = it.id || 'item_' + Math.random().toString(36).substring(2, 9);
-      const itemTotal = Number(it.quantidade) * Number(it.valor_unitario);
-      await executeCommand(
-        `INSERT INTO itens_os (id, os_id, tipo, descricao, quantidade, valor_unitario, valor_total)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [itemId, id, it.tipo, it.descricao, Number(it.quantidade), Number(it.valor_unitario), itemTotal]
-      );
-    }
-
-    // Regra da Quilometragem: se KM informada for maior que a do veículo, atualiza veículo
-    if (data.veiculo_id && Number(data.quilometragem) > 0) {
-      const v = await VeiculoRepository.getById(data.veiculo_id);
-      if (v && Number(data.quilometragem) > Number(v.quilometragem)) {
-        await VeiculoRepository.updateKm(data.veiculo_id, Number(data.quilometragem));
+    await executeTransaction(async (tx) => {
+      // 1. Obtenção atômica e com trava do próximo número da OS caso não informado ou duplicável
+      let num = data.numero;
+      let numFormatado = data.numero_formatado;
+      if (!num || num <= 0) {
+        const rows = await tx.query<{ max_num: number | null }>('SELECT MAX(numero) as max_num FROM ordens_servico');
+        num = (rows[0]?.max_num || 0) + 1;
+        numFormatado = `OS Nº ${String(num).padStart(6, '0')}`;
       }
-    }
 
-    // Registra histórico
-    await this.registrarHistorico(id, 'INÍCIO', data.status || 'ABERTA', data.usuario_responsavel_nome, data.usuario_responsavel_id, 'Criação da Ordem de Serviço');
+      // Recalcula totais rigidamente
+      const subtotal = data.itens.reduce((acc, it) => acc + (Number(it.quantidade) * Number(it.valor_unitario)), 0);
+      const desconto = Number(data.desconto) || 0;
+      const acrescimo = Number(data.acrescimo) || 0;
+      const total = Math.max(0, subtotal - desconto + acrescimo);
+
+      await tx.command(
+        `INSERT INTO ordens_servico (
+          id, numero, numero_formatado, data, hora, cliente_id, veiculo_id,
+          cliente_nome, cliente_cpf_cnpj, cliente_telefone, cliente_whatsapp, cliente_email,
+          cliente_endereco, cliente_cep, veiculo_modelo, veiculo_marca, veiculo_ano,
+          veiculo_cor, veiculo_placa, quilometragem, quilometragem_anterior,
+          reclamacao_cliente, diagnostico_avaliacao, subtotal, desconto, acrescimo,
+          total, forma_pagamento, observacoes, garantia, status,
+          usuario_responsavel_id, usuario_responsavel_nome, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+          $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
+          $33, $34, $35
+        )`,
+        [
+          id,
+          num,
+          numFormatado,
+          data.data,
+          data.hora,
+          data.cliente_id,
+          data.veiculo_id,
+          data.cliente_nome,
+          data.cliente_cpf_cnpj || '',
+          data.cliente_telefone || '',
+          data.cliente_whatsapp || '',
+          data.cliente_email || '',
+          data.cliente_endereco || '',
+          data.cliente_cep || '',
+          data.veiculo_modelo,
+          data.veiculo_marca,
+          Number(data.veiculo_ano),
+          data.veiculo_cor,
+          data.veiculo_placa,
+          Number(data.quilometragem),
+          Number(data.quilometragem_anterior || 0),
+          data.reclamacao_cliente,
+          data.diagnostico_avaliacao || '',
+          subtotal,
+          desconto,
+          acrescimo,
+          total,
+          data.forma_pagamento,
+          data.observacoes || '',
+          data.garantia || '',
+          data.status || 'ABERTA',
+          data.usuario_responsavel_id || 'user_admin',
+          data.usuario_responsavel_nome,
+          now,
+          now,
+        ]
+      );
+
+      // Salva itens da OS
+      for (const it of data.itens) {
+        const itemId = it.id || 'item_' + Math.random().toString(36).substring(2, 9);
+        const itemTotal = Number(it.quantidade) * Number(it.valor_unitario);
+        await tx.command(
+          `INSERT INTO itens_os (id, os_id, tipo, descricao, quantidade, valor_unitario, valor_total)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [itemId, id, it.tipo, it.descricao, Number(it.quantidade), Number(it.valor_unitario), itemTotal]
+        );
+      }
+
+      // Regra da Quilometragem: se KM informada for maior que a do veículo, atualiza veículo
+      if (data.veiculo_id && Number(data.quilometragem) > 0) {
+        const vRows = await tx.query<any>('SELECT quilometragem FROM veiculos WHERE id = $1', [data.veiculo_id]);
+        if (vRows.length > 0 && Number(data.quilometragem) > Number(vRows[0].quilometragem)) {
+          await tx.command(
+            'UPDATE veiculos SET quilometragem = $1, updated_at = $2 WHERE id = $3',
+            [Number(data.quilometragem), now, data.veiculo_id]
+          );
+        }
+      }
+
+      // Registra histórico
+      const histId = 'hist_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+      await tx.command(
+        `INSERT INTO historico_status (id, os_id, status_anterior, status_novo, usuario_id, usuario_nome, motivo)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [histId, id, 'INÍCIO', data.status || 'ABERTA', data.usuario_responsavel_id || 'user_admin', data.usuario_responsavel_nome, 'Criação da Ordem de Serviço']
+      );
+    });
 
     return (await this.getById(id))!;
   },
@@ -1052,58 +1089,65 @@ export const OrdemServicoRepository = {
     const total = Math.max(0, subtotal - desconto + acrescimo);
     const now = new Date().toISOString();
 
-    await executeCommand(
-      `UPDATE ordens_servico SET
-        reclamacao_cliente = $1, diagnostico_avaliacao = $2,
-        subtotal = $3, desconto = $4, acrescimo = $5, total = $6,
-        forma_pagamento = $7, observacoes = $8, garantia = $9,
-        quilometragem = $10, updated_at = $11
-       WHERE id = $12`,
-      [
-        data.reclamacao_cliente ?? current.reclamacao_cliente,
-        data.diagnostico_avaliacao ?? current.diagnostico_avaliacao,
-        subtotal,
-        desconto,
-        acrescimo,
-        total,
-        data.forma_pagamento ?? current.forma_pagamento,
-        data.observacoes ?? current.observacoes,
-        data.garantia ?? current.garantia,
-        data.quilometragem !== undefined ? Number(data.quilometragem) : current.quilometragem,
-        now,
-        id,
-      ]
-    );
+    await executeTransaction(async (tx) => {
+      await tx.command(
+        `UPDATE ordens_servico SET
+          reclamacao_cliente = $1, diagnostico_avaliacao = $2,
+          subtotal = $3, desconto = $4, acrescimo = $5, total = $6,
+          forma_pagamento = $7, observacoes = $8, garantia = $9,
+          quilometragem = $10, updated_at = $11
+         WHERE id = $12`,
+        [
+          data.reclamacao_cliente ?? current.reclamacao_cliente,
+          data.diagnostico_avaliacao ?? current.diagnostico_avaliacao,
+          subtotal,
+          desconto,
+          acrescimo,
+          total,
+          data.forma_pagamento ?? current.forma_pagamento,
+          data.observacoes ?? current.observacoes,
+          data.garantia ?? current.garantia,
+          data.quilometragem !== undefined ? Number(data.quilometragem) : current.quilometragem,
+          now,
+          id,
+        ]
+      );
 
-    // Se itens foram fornecidos, sincroniza itens_os
-    if (data.itens) {
-      await executeCommand('DELETE FROM itens_os WHERE os_id = $1', [id]);
-      for (const it of data.itens) {
-        const itemId = it.id || 'item_' + Math.random().toString(36).substring(2, 9);
-        const itemTotal = Number(it.quantidade) * Number(it.valor_unitario);
-        await executeCommand(
-          `INSERT INTO itens_os (id, os_id, tipo, descricao, quantidade, valor_unitario, valor_total)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [itemId, id, it.tipo, it.descricao, Number(it.quantidade), Number(it.valor_unitario), itemTotal]
-        );
+      // Se itens foram fornecidos, sincroniza itens_os atomicamente
+      if (data.itens) {
+        await tx.command('DELETE FROM itens_os WHERE os_id = $1', [id]);
+        for (const it of data.itens) {
+          const itemId = it.id || 'item_' + Math.random().toString(36).substring(2, 9);
+          const itemTotal = Number(it.quantidade) * Number(it.valor_unitario);
+          await tx.command(
+            `INSERT INTO itens_os (id, os_id, tipo, descricao, quantidade, valor_unitario, valor_total)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [itemId, id, it.tipo, it.descricao, Number(it.quantidade), Number(it.valor_unitario), itemTotal]
+          );
+        }
       }
-    }
 
-    // Atualiza KM do veículo se aplicável
-    if (data.quilometragem && current.veiculo_id) {
-      const v = await VeiculoRepository.getById(current.veiculo_id);
-      if (v && Number(data.quilometragem) > Number(v.quilometragem)) {
-        await VeiculoRepository.updateKm(current.veiculo_id, Number(data.quilometragem));
+      // Atualiza KM do veículo se aplicável
+      if (data.quilometragem && current.veiculo_id) {
+        const vRows = await tx.query<any>('SELECT quilometragem FROM veiculos WHERE id = $1', [current.veiculo_id]);
+        if (vRows.length > 0 && Number(data.quilometragem) > Number(vRows[0].quilometragem)) {
+          await tx.command(
+            'UPDATE veiculos SET quilometragem = $1, updated_at = $2 WHERE id = $3',
+            [Number(data.quilometragem), now, current.veiculo_id]
+          );
+        }
       }
-    }
+    });
 
     return (await this.getById(id))!;
   },
 
   async delete(id: string): Promise<void> {
-    await executeCommand('DELETE FROM historico_status WHERE os_id = $1', [id]);
-    await executeCommand('DELETE FROM itens_os WHERE os_id = $1', [id]);
-    await executeCommand('DELETE FROM ordens_servico WHERE id = $1', [id]);
+    await executeTransaction(async (tx) => {
+      await tx.command('DELETE FROM historico_status WHERE os_id = $1', [id]);
+      await tx.command('DELETE FROM itens_os WHERE os_id = $1', [id]);
+      await tx.command('DELETE FROM ordens_servico WHERE id = $1', [id]);
+    });
   },
 
   async updateStatus(
@@ -1117,19 +1161,27 @@ export const OrdemServicoRepository = {
     if (!current) throw new Error('OS não encontrada');
 
     const now = new Date().toISOString();
-    if (novoStatus === 'CANCELADA') {
-      await executeCommand(
-        `UPDATE ordens_servico SET status = $1, motivo_cancelamento = $2, cancelado_por_usuario = $3, data_cancelamento = $4, updated_at = $5 WHERE id = $6`,
-        ['CANCELADA', motivo, usuarioNome, now, now, id]
-      );
-    } else {
-      await executeCommand(
-        `UPDATE ordens_servico SET status = $1, updated_at = $2 WHERE id = $3`,
-        [novoStatus, now, id]
-      );
-    }
+    await executeTransaction(async (tx) => {
+      if (novoStatus === 'CANCELADA') {
+        await tx.command(
+          `UPDATE ordens_servico SET status = $1, motivo_cancelamento = $2, cancelado_por_usuario = $3, data_cancelamento = $4, updated_at = $5 WHERE id = $6`,
+          ['CANCELADA', motivo, usuarioNome, now, now, id]
+        );
+      } else {
+        await tx.command(
+          `UPDATE ordens_servico SET status = $1, updated_at = $2 WHERE id = $3`,
+          [novoStatus, now, id]
+        );
+      }
 
-    await this.registrarHistorico(id, current.status, novoStatus, usuarioNome, usuarioId, motivo);
+      const histId = 'hist_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+      await tx.command(
+        `INSERT INTO historico_status (id, os_id, status_anterior, status_novo, usuario_id, usuario_nome, motivo)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [histId, id, current.status, novoStatus, usuarioId, usuarioNome, motivo]
+      );
+    });
+
     return (await this.getById(id))!;
   },
 
@@ -1146,18 +1198,25 @@ export const OrdemServicoRepository = {
     if (!current) throw new Error('OS não encontrada');
 
     const now = new Date().toISOString();
-    await executeCommand(
-      `UPDATE ordens_servico SET
-        status = 'CANCELADA',
-        motivo_cancelamento = $1,
-        cancelado_por_usuario = $2,
-        data_cancelamento = $3,
-        updated_at = $4
-       WHERE id = $5`,
-      [motivo.trim(), usuarioNome, now, now, id]
-    );
+    await executeTransaction(async (tx) => {
+      await tx.command(
+        `UPDATE ordens_servico SET
+          status = 'CANCELADA',
+          motivo_cancelamento = $1,
+          cancelado_por_usuario = $2,
+          data_cancelamento = $3,
+          updated_at = $4
+         WHERE id = $5`,
+        [motivo.trim(), usuarioNome, now, now, id]
+      );
 
-    await this.registrarHistorico(id, current.status, 'CANCELADA', usuarioNome, usuarioId, `Cancelamento formal: ${motivo.trim()}`);
+      const histId = 'hist_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+      await tx.command(
+        `INSERT INTO historico_status (id, os_id, status_anterior, status_novo, usuario_id, usuario_nome, motivo)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [histId, id, current.status, 'CANCELADA', usuarioId, usuarioNome, `Cancelamento formal: ${motivo.trim()}`]
+      );
+    });
   },
 
   async registrarHistorico(

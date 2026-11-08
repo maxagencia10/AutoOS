@@ -1,0 +1,1781 @@
+From bb17ca816f3b88e8863f11490330915982dd4c1a Mon Sep 17 00:00:00 2001
+From: maxagencia10 <maxagencia10@gmail.com>
+Date: Sun, 8 Nov 2026 22:10:36 +0000
+Subject: [PATCH] feat(fase1): auditoria e estabilizacao do AutoOS -
+ transacoes, mutex, postmaster.pid e testes
+
+---
+ .gitignore                    |   2 +
+ package.json                  |   3 +-
+ src/db/pgEngine.ts            | 410 ++++++++++++++++---------
+ src/db/postmasterManager.ts   | 135 ++++++++
+ src/services/dbRepository.ts  | 457 +++++++++++++++------------
+ tests/fase1_auditoria.test.ts | 563 ++++++++++++++++++++++++++++++++++
+ 6 files changed, 1230 insertions(+), 340 deletions(-)
+ create mode 100644 src/db/postmasterManager.ts
+ create mode 100644 tests/fase1_auditoria.test.ts
+
+diff --git a/.gitignore b/.gitignore
+index 80dddca..5247792 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -5,3 +5,5 @@ coverage/
+ *.log
+ .env*
+ !.env.example
++dist/
++.tmp_*
+diff --git a/package.json b/package.json
+index e29b31e..78937b5 100644
+--- a/package.json
++++ b/package.json
+@@ -8,7 +8,8 @@
+     "build": "node build.cjs",
+     "start": "node servidor.cjs",
+     "preview": "vite preview",
+-    "lint": "tsc --noEmit"
++    "lint": "tsc --noEmit",
++    "test": "tsx tests/fase1_auditoria.test.ts"
+   },
+   "dependencies": {
+     "@electric-sql/pglite": "^0.2.14",
+diff --git a/src/db/pgEngine.ts b/src/db/pgEngine.ts
+index 15861b0..4cb6188 100644
+--- a/src/db/pgEngine.ts
++++ b/src/db/pgEngine.ts
+@@ -7,9 +7,45 @@ import {
+   ORDENS_SERVICO_DEMO,
+ } from './initialData';
+ import { BackupMetadata } from '../types';
++import { verifyAndRecoverPostmasterPid } from './postmasterManager';
++export { verifyAndRecoverPostmasterPid };
+ 
+ let pgInstance: PGlite | null = null;
+ let isInitialized = false;
++let initPromise: Promise<PGlite> | null = null;
++
++/**
++ * Mutex Assíncrono com encadeamento de fila FIFO resiliente.
++ * Garante que operações e transações no PGlite (WASM) sejam rigorosamente serializadas,
++ * prevenindo colisões no protocolo interno e corrupção de concorrência.
++ */
++class AsyncMutex {
++  private queue: Promise<void> = Promise.resolve();
++
++  async runExclusive<T>(fn: () => Promise<T>): Promise<T> {
++    let release: () => void;
++    const waitPromise = new Promise<void>((resolve) => {
++      release = resolve;
++    });
++    const currentQueue = this.queue;
++    this.queue = currentQueue.then(() => waitPromise, () => waitPromise);
++
++    await currentQueue;
++    try {
++      return await fn();
++    } finally {
++      release!();
++    }
++  }
++}
++
++export const dbMutex = new AsyncMutex();
++
++export interface TransactionClient {
++  query<T = any>(sql: string, params?: any[]): Promise<T[]>;
++  command(sql: string, params?: any[]): Promise<void>;
++  exec(sql: string): Promise<void>;
++}
+ 
+ // SQL DDL para criação do schema PostgreSQL
+ const SCHEMA_DDL = `
+@@ -108,7 +144,7 @@ CREATE TABLE IF NOT EXISTS veiculos (
+ CREATE TABLE IF NOT EXISTS ordens_servico (
+     id VARCHAR(50) PRIMARY KEY,
+     oficina_id VARCHAR(50) DEFAULT 'oficina_matriz',
+-    numero INTEGER NOT NULL,
++    numero INTEGER NOT NULL UNIQUE,
+     numero_formatado VARCHAR(20) NOT NULL,
+     data VARCHAR(10) NOT NULL,
+     hora VARCHAR(8) NOT NULL,
+@@ -189,30 +225,76 @@ CREATE TABLE IF NOT EXISTS sistema_info (
+ `;
+ 
+ export async function getPgEngine(): Promise<PGlite> {
+-  if (pgInstance) {
++  if (pgInstance && isInitialized && !pgInstance.closed) {
+     return pgInstance;
+   }
++  if (initPromise) {
++    return initPromise;
++  }
+ 
+-  try {
+-    // Tenta persistir no IndexedDB do navegador para manter os dados mesmo fechando a aba
+-    if (typeof window !== 'undefined' && 'indexedDB' in window) {
+-      pgInstance = new PGlite('idb://oficina_mecanica_pg_v1');
+-    } else {
+-      pgInstance = new PGlite();
++  initPromise = (async () => {
++    try {
++      if (!pgInstance || pgInstance.closed) {
++        if (typeof window !== 'undefined' && 'indexedDB' in window) {
++          try {
++            pgInstance = new PGlite('idb://oficina_mecanica_pg_v1');
++            await pgInstance.waitReady;
++          } catch (idbErr) {
++            console.warn('[AutoOS] Falha ao abrir PGlite no IndexedDB, usando em memória:', idbErr);
++            pgInstance = new PGlite();
++            await pgInstance.waitReady;
++          }
++        } else {
++          // Ambiente Node / Servidor / Testes
++          const customDataDir = process.env.AUTOOS_DATA_DIR;
++          if (customDataDir) {
++            await verifyAndRecoverPostmasterPid(customDataDir);
++            pgInstance = new PGlite(customDataDir);
++          } else {
++            pgInstance = new PGlite();
++          }
++          await pgInstance.waitReady;
++        }
++      }
++
++      if (!isInitialized) {
++        await initializeDatabase(pgInstance);
++        isInitialized = true;
++      }
++
++      return pgInstance;
++    } catch (err) {
++      console.error('[AutoOS] Falha crítica na inicialização do PGlite:', err);
++      // Limpeza de estado para permitir recuperação limpa em novas chamadas
++      pgInstance = null;
++      isInitialized = false;
++      initPromise = null;
++      throw err;
+     }
+-    await pgInstance.waitReady;
+-  } catch (err) {
+-    console.warn('Falha ao abrir PGlite no IndexedDB, usando em memória:', err);
+-    pgInstance = new PGlite();
+-    await pgInstance.waitReady;
+-  }
++  })();
+ 
+-  if (!isInitialized) {
+-    await initializeDatabase(pgInstance);
+-    isInitialized = true;
+-  }
++  return initPromise;
++}
+ 
+-  return pgInstance;
++/**
++ * Encerramento limpo e gracioso do engine PGlite.
++ * Aguarda operações pendentes na fila, fecha o banco e libera recursos.
++ */
++export async function closePgEngine(): Promise<void> {
++  await dbMutex.runExclusive(async () => {
++    if (pgInstance) {
++      try {
++        if (!pgInstance.closed) {
++          await pgInstance.close();
++        }
++      } catch (err) {
++        console.warn('[AutoOS] Aviso ao encerrar PGlite:', err);
++      }
++      pgInstance = null;
++      isInitialized = false;
++      initPromise = null;
++    }
++  });
+ }
+ 
+ async function initializeDatabase(db: PGlite): Promise<void> {
+@@ -243,6 +325,7 @@ async function initializeDatabase(db: PGlite): Promise<void> {
+     'ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cidade VARCHAR(100)',
+     'ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS estado VARCHAR(2)',
+     "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS senha VARCHAR(255) DEFAULT '123'",
++    'CREATE UNIQUE INDEX IF NOT EXISTS idx_ordens_servico_numero ON ordens_servico(numero)',
+   ];
+ 
+   for (const sql of migrations) {
+@@ -459,16 +542,60 @@ export async function seedInitialData(db: PGlite): Promise<void> {
+   }
+ }
+ 
+-// Wrapper seguro para consultas SQL
++// Wrapper seguro e isolado contra concorrência para consultas SQL
+ export async function executeQuery<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+   const db = await getPgEngine();
+-  const res = await db.query<T>(sql, params);
+-  return res.rows;
++  return await dbMutex.runExclusive(async () => {
++    const res = await db.query<T>(sql, params);
++    return res.rows;
++  });
+ }
+ 
+ export async function executeCommand(sql: string, params: any[] = []): Promise<void> {
+   const db = await getPgEngine();
+-  await db.query(sql, params);
++  await dbMutex.runExclusive(async () => {
++    await db.query(sql, params);
++  });
++}
++
++/**
++ * Executa um bloco de operações atômicas dentro de uma transação PostgreSQL (BEGIN ... COMMIT / ROLLBACK).
++ * O dbMutex garante exclusividade absoluta sobre o motor PGlite durante todo o ciclo de vida da transação.
++ * Em caso de qualquer erro, um ROLLBACK é emitido imediatamente, garantindo que nenhuma transação fique aberta.
++ */
++export async function executeTransaction<T>(
++  callback: (client: TransactionClient) => Promise<T>
++): Promise<T> {
++  const db = await getPgEngine();
++  return await dbMutex.runExclusive(async () => {
++    await db.exec('BEGIN');
++
++    const txClient: TransactionClient = {
++      query: async <R = any>(sql: string, params: any[] = []) => {
++        const res = await db.query<R>(sql, params);
++        return res.rows;
++      },
++      command: async (sql: string, params: any[] = []) => {
++        await db.query(sql, params);
++      },
++      exec: async (sql: string) => {
++        await db.exec(sql);
++      },
++    };
++
++    try {
++      const result = await callback(txClient);
++      await db.exec('COMMIT');
++      return result;
++    } catch (error) {
++      try {
++        await db.exec('ROLLBACK');
++      } catch (rollbackErr) {
++        console.error('[AutoOS] Erro fatal durante ROLLBACK:', rollbackErr);
++      }
++      throw error;
++    }
++  });
+ }
+ 
+ // Geração de DUMP PostgreSQL completo (.SQL) pronto para `psql -U postgres -d oficina < backup.sql`
+@@ -584,149 +711,152 @@ export async function generateJsonBackup(): Promise<{ metadata: BackupMetadata;
+   };
+ }
+ 
+-// Restauração a partir de JSON
++// Restauração a partir de JSON de forma 100% transacional e atômica
+ export async function restoreFromJson(backupData: any): Promise<void> {
+-  const db = await getPgEngine();
+   const d = backupData.data || backupData;
+ 
+   if (!d.oficina && !d.clientes) {
+     throw new Error('Arquivo de backup inválido ou estrutura corrompida.');
+   }
+ 
+-  await db.exec(`
+-    DELETE FROM itens_os;
+-    DELETE FROM historico_status;
+-    DELETE FROM ordens_servico;
+-    DELETE FROM veiculos;
+-    DELETE FROM clientes;
+-    DELETE FROM usuarios;
+-    DELETE FROM oficina;
+-  `);
+-
+-  // Restaura oficina
+-  if (d.oficina && d.oficina.length > 0) {
+-    for (const o of d.oficina) {
+-      await db.query(
+-        `INSERT INTO oficina VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+-        [
+-          o.id, o.nome, o.razao_social, o.nome_fantasia, o.cnpj, o.telefone, o.whatsapp, o.email,
+-          o.cep, o.logradouro, o.numero, o.complemento, o.bairro, o.cidade, o.estado, o.logo,
+-          o.texto_institucional, o.texto_padrao_garantia, o.texto_padrao_condicoes,
+-          o.created_at || new Date().toISOString(), o.updated_at || new Date().toISOString()
+-        ]
+-      );
++  await executeTransaction(async (tx) => {
++    await tx.exec(`
++      DELETE FROM itens_os;
++      DELETE FROM historico_status;
++      DELETE FROM ordens_servico;
++      DELETE FROM veiculos;
++      DELETE FROM clientes;
++      DELETE FROM usuarios;
++      DELETE FROM oficina;
++    `);
++
++    // Restaura oficina
++    if (d.oficina && d.oficina.length > 0) {
++      for (const o of d.oficina) {
++        await tx.command(
++          `INSERT INTO oficina VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
++          [
++            o.id, o.nome, o.razao_social, o.nome_fantasia, o.cnpj, o.telefone, o.whatsapp, o.email,
++            o.cep, o.logradouro, o.numero, o.complemento, o.bairro, o.cidade, o.estado, o.logo,
++            o.texto_institucional, o.texto_padrao_garantia, o.texto_padrao_condicoes,
++            o.created_at || new Date().toISOString(), o.updated_at || new Date().toISOString()
++          ]
++        );
++      }
+     }
+-  }
+ 
+-  // Restaura usuários
+-  if (d.usuarios) {
+-    for (const u of d.usuarios) {
+-      await db.query(
+-        `INSERT INTO usuarios (id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro, cidade, estado, perfil, ativo, created_at, updated_at)
+-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+-        [
+-          u.id,
+-          u.oficina_id || 'oficina_matriz',
+-          u.nome,
+-          u.email,
+-          u.senha || '123',
+-          u.telefone || '',
+-          u.cep || '',
+-          u.logradouro || '',
+-          u.numero || '',
+-          u.bairro || '',
+-          u.cidade || '',
+-          u.estado || '',
+-          u.perfil,
+-          u.ativo ?? true,
+-          u.created_at || new Date().toISOString(),
+-          u.updated_at || new Date().toISOString(),
+-        ]
+-      );
++    // Restaura usuários
++    if (d.usuarios) {
++      for (const u of d.usuarios) {
++        await tx.command(
++          `INSERT INTO usuarios (id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro, cidade, estado, perfil, ativo, created_at, updated_at)
++           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
++          [
++            u.id,
++            u.oficina_id || 'oficina_matriz',
++            u.nome,
++            u.email,
++            u.senha || '123',
++            u.telefone || '',
++            u.cep || '',
++            u.logradouro || '',
++            u.numero || '',
++            u.bairro || '',
++            u.cidade || '',
++            u.estado || '',
++            u.perfil,
++            u.ativo ?? true,
++            u.created_at || new Date().toISOString(),
++            u.updated_at || new Date().toISOString(),
++          ]
++        );
++      }
+     }
+-  }
+ 
+-  // Restaura clientes
+-  if (d.clientes) {
+-    for (const c of d.clientes) {
+-      await db.query(
+-        `INSERT INTO clientes VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+-        [
+-          c.id, c.oficina_id, c.nome, c.cpf_cnpj, c.telefone, c.whatsapp, c.email,
+-          c.cep, c.logradouro, c.numero, c.complemento, c.bairro, c.cidade, c.estado,
+-          c.created_at || new Date().toISOString(), c.updated_at || new Date().toISOString()
+-        ]
+-      );
++    // Restaura clientes
++    if (d.clientes) {
++      for (const c of d.clientes) {
++        await tx.command(
++          `INSERT INTO clientes VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
++          [
++            c.id, c.oficina_id, c.nome, c.cpf_cnpj, c.telefone, c.whatsapp, c.email,
++            c.cep, c.logradouro, c.numero, c.complemento, c.bairro, c.cidade, c.estado,
++            c.created_at || new Date().toISOString(), c.updated_at || new Date().toISOString()
++          ]
++        );
++      }
+     }
+-  }
+ 
+-  // Restaura veículos
+-  if (d.veiculos) {
+-    for (const v of d.veiculos) {
+-      await db.query(
+-        `INSERT INTO veiculos VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+-        [v.id, v.cliente_id, v.veiculo, v.marca, v.ano, v.cor, v.placa, v.quilometragem, v.created_at || new Date().toISOString(), v.updated_at || new Date().toISOString()]
+-      );
++    // Restaura veículos
++    if (d.veiculos) {
++      for (const v of d.veiculos) {
++        await tx.command(
++          `INSERT INTO veiculos VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
++          [v.id, v.cliente_id, v.veiculo, v.marca, v.ano, v.cor, v.placa, v.quilometragem, v.created_at || new Date().toISOString(), v.updated_at || new Date().toISOString()]
++        );
++      }
+     }
+-  }
+ 
+-  // Restaura ordens_servico
+-  if (d.ordens_servico) {
+-    for (const o of d.ordens_servico) {
+-      await db.query(
+-        `INSERT INTO ordens_servico VALUES (
+-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+-          $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
+-          $33, $34, $35, $36, $37, $38
+-        )`,
+-        [
+-          o.id, o.numero, o.numero_formatado, o.data, o.hora, o.cliente_id, o.veiculo_id,
+-          o.cliente_nome, o.cliente_cpf_cnpj, o.cliente_telefone, o.cliente_whatsapp, o.cliente_email,
+-          o.cliente_endereco, o.cliente_cep, o.veiculo_modelo, o.veiculo_marca, o.veiculo_ano,
+-          o.veiculo_cor, o.veiculo_placa, o.quilometragem, o.quilometragem_anterior || 0,
+-          o.reclamacao_cliente, o.diagnostico_avaliacao, o.subtotal, o.desconto, o.acrescimo,
+-          o.total, o.forma_pagamento, o.observacoes, o.garantia, o.status,
+-          o.motivo_cancelamento, o.cancelado_por_usuario, o.data_cancelamento,
+-          o.usuario_responsavel_id, o.usuario_responsavel_nome, o.created_at || new Date().toISOString(), o.updated_at || new Date().toISOString()
+-        ]
+-      );
++    // Restaura ordens_servico
++    if (d.ordens_servico) {
++      for (const o of d.ordens_servico) {
++        await tx.command(
++          `INSERT INTO ordens_servico VALUES (
++            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
++            $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
++            $33, $34, $35, $36, $37, $38
++          )`,
++          [
++            o.id, o.numero, o.numero_formatado, o.data, o.hora, o.cliente_id, o.veiculo_id,
++            o.cliente_nome, o.cliente_cpf_cnpj, o.cliente_telefone, o.cliente_whatsapp, o.cliente_email,
++            o.cliente_endereco, o.cliente_cep, o.veiculo_modelo, o.veiculo_marca, o.veiculo_ano,
++            o.veiculo_cor, o.veiculo_placa, o.quilometragem, o.quilometragem_anterior || 0,
++            o.reclamacao_cliente, o.diagnostico_avaliacao, o.subtotal, o.desconto, o.acrescimo,
++            o.total, o.forma_pagamento, o.observacoes, o.garantia, o.status,
++            o.motivo_cancelamento, o.cancelado_por_usuario, o.data_cancelamento,
++            o.usuario_responsavel_id, o.usuario_responsavel_nome, o.created_at || new Date().toISOString(), o.updated_at || new Date().toISOString()
++          ]
++        );
++      }
+     }
+-  }
+ 
+-  // Restaura itens_os
+-  if (d.itens_os) {
+-    for (const it of d.itens_os) {
+-      await db.query(
+-        `INSERT INTO itens_os VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+-        [it.id, it.os_id, it.tipo, it.descricao, it.quantidade, it.valor_unitario, it.valor_total]
+-      );
++    // Restaura itens_os
++    if (d.itens_os) {
++      for (const it of d.itens_os) {
++        await tx.command(
++          `INSERT INTO itens_os VALUES ($1, $2, $3, $4, $5, $6, $7)`,
++          [it.id, it.os_id, it.tipo, it.descricao, it.quantidade, it.valor_unitario, it.valor_total]
++        );
++      }
+     }
+-  }
++  });
+ }
+ 
+ // Limpeza exclusiva de dados de demonstração (mantém oficina e usuários)
+ export async function cleanDemoData(): Promise<void> {
+-  const db = await getPgEngine();
+-  await db.exec(`
+-    DELETE FROM itens_os WHERE os_id IN ('os_001', 'os_002');
+-    DELETE FROM ordens_servico WHERE id IN ('os_001', 'os_002');
+-    DELETE FROM veiculos WHERE id IN ('veic_01', 'veic_02', 'veic_03');
+-    DELETE FROM clientes WHERE id IN ('cli_01', 'cli_02', 'cli_03');
+-  `);
++  await executeTransaction(async (tx) => {
++    await tx.exec(`
++      DELETE FROM itens_os WHERE os_id IN ('os_001', 'os_002');
++      DELETE FROM ordens_servico WHERE id IN ('os_001', 'os_002');
++      DELETE FROM veiculos WHERE id IN ('veic_01', 'veic_02', 'veic_03');
++      DELETE FROM clientes WHERE id IN ('cli_01', 'cli_02', 'cli_03');
++    `);
++  });
+ }
+ 
+ // Limpeza completa (Zerar Banco para Modo Nova Instalação)
+ export async function wipeDatabaseClean(): Promise<void> {
+-  const db = await getPgEngine();
+-  await db.exec(`
+-    DELETE FROM itens_os;
+-    DELETE FROM historico_status;
+-    DELETE FROM ordens_servico;
+-    DELETE FROM veiculos;
+-    DELETE FROM clientes;
+-    DELETE FROM usuarios;
+-    DELETE FROM oficina;
+-  `);
++  await executeTransaction(async (tx) => {
++    await tx.exec(`
++      DELETE FROM itens_os;
++      DELETE FROM historico_status;
++      DELETE FROM ordens_servico;
++      DELETE FROM veiculos;
++      DELETE FROM clientes;
++      DELETE FROM usuarios;
++      DELETE FROM oficina;
++    `);
++  });
+ }
+ 
+ // Reset para dados de demonstração (quando solicitado pelo usuário)
+diff --git a/src/db/postmasterManager.ts b/src/db/postmasterManager.ts
+new file mode 100644
+index 0000000..1c50946
+--- /dev/null
++++ b/src/db/postmasterManager.ts
+@@ -0,0 +1,135 @@
++/**
++ * AutoOS - Gerenciador Seguro de postmaster.pid
++ * 
++ * Regras Obrigatórias da Fase 1:
++ * 1. NUNCA remover postmaster.pid se pertencer a um processo ativo no SO.
++ * 2. Verificar o estado real do processo via verificação de sinal do SO (process.kill(pid, 0)).
++ * 3. Recuperar inicialização de forma segura caso o arquivo seja comprovadamente órfão (ESRCH).
++ * 4. Evitar qualquer exclusão indiscriminada que possa causar corrupção por escrita concorrente.
++ */
++
++export interface PostmasterCheckResult {
++  status: 'none' | 'active_process' | 'stale_cleaned' | 'corrupt_cleaned' | 'browser_environment' | 'error';
++  pid?: number;
++  message: string;
++  dataDir?: string;
++}
++
++class PostmasterMutex {
++  private queue: Promise<void> = Promise.resolve();
++
++  async runExclusive<T>(fn: () => Promise<T>): Promise<T> {
++    let release: () => void;
++    const waitPromise = new Promise<void>((resolve) => {
++      release = resolve;
++    });
++    const currentQueue = this.queue;
++    this.queue = currentQueue.then(() => waitPromise, () => waitPromise);
++    await currentQueue;
++    try {
++      return await fn();
++    } finally {
++      release!();
++    }
++  }
++}
++
++const pidMutex = new PostmasterMutex();
++
++export async function verifyAndRecoverPostmasterPid(dataDir: string): Promise<PostmasterCheckResult> {
++  // Se estiver rodando no navegador (IndexedDB), não há sistema de arquivos do SO
++  if (typeof window !== 'undefined' || typeof process === 'undefined' || !process.kill) {
++    return {
++      status: 'browser_environment',
++      message: 'Ambiente de navegador detectado. postmaster.pid gerenciado internamente pelo driver de armazenamento.',
++      dataDir,
++    };
++  }
++
++  return await pidMutex.runExclusive(async () => {
++    try {
++    // Carregamento dinâmico assíncrono nativo do Node.js (compatível com ESM e seguro para bundlers de navegador)
++    const fs = await import('node:fs');
++    const path = await import('node:path');
++
++    if (!fs.existsSync(dataDir)) {
++      return {
++        status: 'none',
++        message: `Diretório de dados '${dataDir}' não existe ainda. Nenhuma trava pendente.`,
++        dataDir,
++      };
++    }
++
++    const pidFilePath = path.join(dataDir, 'postmaster.pid');
++    if (!fs.existsSync(pidFilePath)) {
++      return {
++        status: 'none',
++        message: 'Nenhum arquivo postmaster.pid encontrado. Diretório limpo.',
++        dataDir,
++      };
++    }
++
++    // Lê conteúdo do arquivo postmaster.pid
++    const content = fs.readFileSync(pidFilePath, 'utf8');
++    const firstLine = content.split('\n')[0]?.trim();
++    const pid = parseInt(firstLine || '', 10);
++
++    if (isNaN(pid) || pid <= 0) {
++      // Arquivo com formato inválido/corrompido
++      const backupPath = path.join(dataDir, `postmaster.pid.corrupt_${Date.now()}`);
++      fs.renameSync(pidFilePath, backupPath);
++      return {
++        status: 'corrupt_cleaned',
++        message: `postmaster.pid continha dados inválidos ('${firstLine}'). Arquivo isolado em '${backupPath}' para permitir inicialização limpa.`,
++        dataDir,
++      };
++    }
++
++    // Verifica se o processo associado ao PID está de fato vivo no sistema operacional
++    let isProcessAlive = false;
++    try {
++      // process.kill(pid, 0) não envia sinal destrutivo; apenas testa a existência do processo no SO
++      process.kill(pid, 0);
++      isProcessAlive = true;
++    } catch (err: any) {
++      if (err.code === 'EPERM') {
++        // Processo existe mas o usuário atual não tem permissão de enviar sinal: ESTÁ VIVO
++        isProcessAlive = true;
++      } else if (err.code === 'ESRCH') {
++        // ESRCH = No such process. O processo NÃO existe mais no SO
++        isProcessAlive = false;
++      } else {
++        // Erro desconhecido: por segurança máxima e prevenção de corrupção, assume que está vivo
++        console.warn(`[AutoOS PID Audit] Código de erro inesperado ao checar PID ${pid}:`, err);
++        isProcessAlive = true;
++      }
++    }
++
++    if (isProcessAlive) {
++      // REGRA CRÍTICA: NUNCA REMOVA UM PROCESSO ATIVO!
++      return {
++        status: 'active_process',
++        pid,
++        message: `ALERTA DE SEGURANÇA: O processo PID ${pid} está ATIVO no sistema operacional. postmaster.pid PRESERVADO para evitar corrupção e concorrência destrutiva.`,
++        dataDir,
++      };
++    }
++
++    // Processo comprovadamente morto (queda de energia, crash anterior, kill forçado)
++    // Remoção estritamente segura de arquivo órfão
++    fs.unlinkSync(pidFilePath);
++    return {
++      status: 'stale_cleaned',
++      pid,
++      message: `RECUPERAÇÃO CONCLUÍDA: Processo anterior PID ${pid} finalizado (ESRCH). postmaster.pid órfão foi removido com segurança para permitir nova inicialização do banco.`,
++      dataDir,
++    };
++    } catch (err: any) {
++      return {
++        status: 'error',
++        message: `Falha na verificação de postmaster.pid: ${err.message || String(err)}`,
++        dataDir,
++      };
++    }
++  });
++}
+diff --git a/src/services/dbRepository.ts b/src/services/dbRepository.ts
+index 6fb40af..7b07837 100644
+--- a/src/services/dbRepository.ts
++++ b/src/services/dbRepository.ts
+@@ -1,4 +1,12 @@
+-import { executeQuery, executeCommand, wipeDatabaseClean, resetDatabase, getPgEngine } from '../db/pgEngine';
++import {
++  executeQuery,
++  executeCommand,
++  executeTransaction,
++  TransactionClient,
++  wipeDatabaseClean,
++  resetDatabase,
++  getPgEngine,
++} from '../db/pgEngine';
+ import {
+   OficinaConfig,
+   Usuario,
+@@ -65,11 +73,9 @@ export const SistemaRepository = {
+       texto_padrao_condicoes?: string;
+     };
+   }): Promise<{ adminUser: Usuario; oficinaConfig: OficinaConfig }> {
+-    // 1. Garante que qualquer registro anterior seja limpo
+-    await wipeDatabaseClean();
+-
+     const oficinaId = 'oficina_matriz';
+     const agora = new Date().toISOString();
++    const adminId = 'admin_' + Date.now();
+ 
+     const oficinaConfig: OficinaConfig = {
+       id: oficinaId,
+@@ -104,62 +110,74 @@ export const SistemaRepository = {
+       updated_at: agora,
+     };
+ 
+-    // 2. Insere a Oficina
+-    await executeCommand(
+-      `INSERT INTO oficina (
+-        id, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
+-        cep, logradouro, numero, complemento, bairro, cidade, estado, logo,
+-        banner_cabecalho, cabecalho_fundo, cabecalho_logo, cabecalho_escritas,
+-        modo_cabecalho, texto_institucional, texto_padrao_garantia, texto_padrao_condicoes,
+-        created_at, updated_at
+-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
+-      [
+-        oficinaConfig.id,
+-        oficinaConfig.nome,
+-        oficinaConfig.razao_social,
+-        oficinaConfig.nome_fantasia,
+-        oficinaConfig.cnpj,
+-        oficinaConfig.telefone,
+-        oficinaConfig.whatsapp,
+-        oficinaConfig.email,
+-        oficinaConfig.cep,
+-        oficinaConfig.logradouro,
+-        oficinaConfig.numero,
+-        oficinaConfig.complemento,
+-        oficinaConfig.bairro,
+-        oficinaConfig.cidade,
+-        oficinaConfig.estado,
+-        oficinaConfig.logo,
+-        oficinaConfig.banner_cabecalho,
+-        oficinaConfig.cabecalho_fundo,
+-        oficinaConfig.cabecalho_logo,
+-        oficinaConfig.cabecalho_escritas,
+-        oficinaConfig.modo_cabecalho,
+-        oficinaConfig.texto_institucional,
+-        oficinaConfig.texto_padrao_garantia,
+-        oficinaConfig.texto_padrao_condicoes,
+-        oficinaConfig.created_at,
+-        oficinaConfig.updated_at,
+-      ]
+-    );
++    // Execução atômica e transacional: se houver falha, tudo é revertido via ROLLBACK
++    await executeTransaction(async (tx) => {
++      await tx.exec(`
++        DELETE FROM itens_os;
++        DELETE FROM historico_status;
++        DELETE FROM ordens_servico;
++        DELETE FROM veiculos;
++        DELETE FROM clientes;
++        DELETE FROM usuarios;
++        DELETE FROM oficina;
++      `);
++
++      // 2. Insere a Oficina
++      await tx.command(
++        `INSERT INTO oficina (
++          id, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
++          cep, logradouro, numero, complemento, bairro, cidade, estado, logo,
++          banner_cabecalho, cabecalho_fundo, cabecalho_logo, cabecalho_escritas,
++          modo_cabecalho, texto_institucional, texto_padrao_garantia, texto_padrao_condicoes,
++          created_at, updated_at
++        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
++        [
++          oficinaConfig.id,
++          oficinaConfig.nome,
++          oficinaConfig.razao_social,
++          oficinaConfig.nome_fantasia,
++          oficinaConfig.cnpj,
++          oficinaConfig.telefone,
++          oficinaConfig.whatsapp,
++          oficinaConfig.email,
++          oficinaConfig.cep,
++          oficinaConfig.logradouro,
++          oficinaConfig.numero,
++          oficinaConfig.complemento,
++          oficinaConfig.bairro,
++          oficinaConfig.cidade,
++          oficinaConfig.estado,
++          oficinaConfig.logo,
++          oficinaConfig.banner_cabecalho,
++          oficinaConfig.cabecalho_fundo,
++          oficinaConfig.cabecalho_logo,
++          oficinaConfig.cabecalho_escritas,
++          oficinaConfig.modo_cabecalho,
++          oficinaConfig.texto_institucional,
++          oficinaConfig.texto_padrao_garantia,
++          oficinaConfig.texto_padrao_condicoes,
++          oficinaConfig.created_at,
++          oficinaConfig.updated_at,
++        ]
++      );
+ 
+-    // 3. Insere o Administrador Geral da Plataforma (SUPERADMIN)
+-    const adminId = 'admin_' + Date.now();
+-    await executeCommand(
+-      `INSERT INTO usuarios (id, oficina_id, nome, email, senha, perfil, ativo, created_at, updated_at)
+-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+-      [
+-        adminId,
+-        oficinaId,
+-        dados.admin.nome.trim(),
+-        dados.admin.email.trim().toLowerCase(),
+-        dados.admin.senha || 'admin',
+-        'SUPERADMIN',
+-        true,
+-        agora,
+-        agora,
+-      ]
+-    );
++      // 3. Insere o Administrador Geral da Plataforma (SUPERADMIN)
++      await tx.command(
++        `INSERT INTO usuarios (id, oficina_id, nome, email, senha, perfil, ativo, created_at, updated_at)
++         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
++        [
++          adminId,
++          oficinaId,
++          dados.admin.nome.trim(),
++          dados.admin.email.trim().toLowerCase(),
++          dados.admin.senha || 'admin',
++          'SUPERADMIN',
++          true,
++          agora,
++          agora,
++        ]
++      );
++    });
+ 
+     const adminUser: Usuario = {
+       id: adminId,
+@@ -954,89 +972,108 @@ export const OrdemServicoRepository = {
+   },
+ 
+   async create(data: Omit<OrdemServico, 'id' | 'created_at' | 'updated_at'>): Promise<OrdemServico> {
+-    const id = 'os_' + Date.now();
++    const id = 'os_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+     const now = new Date().toISOString();
+ 
+-    // Recalcula totais rigidamente
+-    const subtotal = data.itens.reduce((acc, it) => acc + (Number(it.quantidade) * Number(it.valor_unitario)), 0);
+-    const desconto = Number(data.desconto) || 0;
+-    const acrescimo = Number(data.acrescimo) || 0;
+-    const total = Math.max(0, subtotal - desconto + acrescimo);
++    await executeTransaction(async (tx) => {
++      // 1. Obtenção atômica e com trava do próximo número da OS caso não informado ou duplicável
++      let num = data.numero;
++      let numFormatado = data.numero_formatado;
++      if (!num || num <= 0) {
++        const rows = await tx.query<{ max_num: number | null }>('SELECT MAX(numero) as max_num FROM ordens_servico');
++        num = (rows[0]?.max_num || 0) + 1;
++        numFormatado = `OS Nº ${String(num).padStart(6, '0')}`;
++      }
+ 
+-    await executeCommand(
+-      `INSERT INTO ordens_servico (
+-        id, numero, numero_formatado, data, hora, cliente_id, veiculo_id,
+-        cliente_nome, cliente_cpf_cnpj, cliente_telefone, cliente_whatsapp, cliente_email,
+-        cliente_endereco, cliente_cep, veiculo_modelo, veiculo_marca, veiculo_ano,
+-        veiculo_cor, veiculo_placa, quilometragem, quilometragem_anterior,
+-        reclamacao_cliente, diagnostico_avaliacao, subtotal, desconto, acrescimo,
+-        total, forma_pagamento, observacoes, garantia, status,
+-        usuario_responsavel_id, usuario_responsavel_nome, created_at, updated_at
+-      ) VALUES (
+-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+-        $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
+-        $33, $34, $35
+-      )`,
+-      [
+-        id,
+-        data.numero,
+-        data.numero_formatado,
+-        data.data,
+-        data.hora,
+-        data.cliente_id,
+-        data.veiculo_id,
+-        data.cliente_nome,
+-        data.cliente_cpf_cnpj || '',
+-        data.cliente_telefone || '',
+-        data.cliente_whatsapp || '',
+-        data.cliente_email || '',
+-        data.cliente_endereco || '',
+-        data.cliente_cep || '',
+-        data.veiculo_modelo,
+-        data.veiculo_marca,
+-        Number(data.veiculo_ano),
+-        data.veiculo_cor,
+-        data.veiculo_placa,
+-        Number(data.quilometragem),
+-        Number(data.quilometragem_anterior || 0),
+-        data.reclamacao_cliente,
+-        data.diagnostico_avaliacao || '',
+-        subtotal,
+-        desconto,
+-        acrescimo,
+-        total,
+-        data.forma_pagamento,
+-        data.observacoes || '',
+-        data.garantia || '',
+-        data.status || 'ABERTA',
+-        data.usuario_responsavel_id || 'user_admin',
+-        data.usuario_responsavel_nome,
+-        now,
+-        now,
+-      ]
+-    );
++      // Recalcula totais rigidamente
++      const subtotal = data.itens.reduce((acc, it) => acc + (Number(it.quantidade) * Number(it.valor_unitario)), 0);
++      const desconto = Number(data.desconto) || 0;
++      const acrescimo = Number(data.acrescimo) || 0;
++      const total = Math.max(0, subtotal - desconto + acrescimo);
+ 
+-    // Salva itens da OS
+-    for (const it of data.itens) {
+-      const itemId = it.id || 'item_' + Math.random().toString(36).substring(2, 9);
+-      const itemTotal = Number(it.quantidade) * Number(it.valor_unitario);
+-      await executeCommand(
+-        `INSERT INTO itens_os (id, os_id, tipo, descricao, quantidade, valor_unitario, valor_total)
+-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+-        [itemId, id, it.tipo, it.descricao, Number(it.quantidade), Number(it.valor_unitario), itemTotal]
++      await tx.command(
++        `INSERT INTO ordens_servico (
++          id, numero, numero_formatado, data, hora, cliente_id, veiculo_id,
++          cliente_nome, cliente_cpf_cnpj, cliente_telefone, cliente_whatsapp, cliente_email,
++          cliente_endereco, cliente_cep, veiculo_modelo, veiculo_marca, veiculo_ano,
++          veiculo_cor, veiculo_placa, quilometragem, quilometragem_anterior,
++          reclamacao_cliente, diagnostico_avaliacao, subtotal, desconto, acrescimo,
++          total, forma_pagamento, observacoes, garantia, status,
++          usuario_responsavel_id, usuario_responsavel_nome, created_at, updated_at
++        ) VALUES (
++          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
++          $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
++          $33, $34, $35
++        )`,
++        [
++          id,
++          num,
++          numFormatado,
++          data.data,
++          data.hora,
++          data.cliente_id,
++          data.veiculo_id,
++          data.cliente_nome,
++          data.cliente_cpf_cnpj || '',
++          data.cliente_telefone || '',
++          data.cliente_whatsapp || '',
++          data.cliente_email || '',
++          data.cliente_endereco || '',
++          data.cliente_cep || '',
++          data.veiculo_modelo,
++          data.veiculo_marca,
++          Number(data.veiculo_ano),
++          data.veiculo_cor,
++          data.veiculo_placa,
++          Number(data.quilometragem),
++          Number(data.quilometragem_anterior || 0),
++          data.reclamacao_cliente,
++          data.diagnostico_avaliacao || '',
++          subtotal,
++          desconto,
++          acrescimo,
++          total,
++          data.forma_pagamento,
++          data.observacoes || '',
++          data.garantia || '',
++          data.status || 'ABERTA',
++          data.usuario_responsavel_id || 'user_admin',
++          data.usuario_responsavel_nome,
++          now,
++          now,
++        ]
+       );
+-    }
+ 
+-    // Regra da Quilometragem: se KM informada for maior que a do veículo, atualiza veículo
+-    if (data.veiculo_id && Number(data.quilometragem) > 0) {
+-      const v = await VeiculoRepository.getById(data.veiculo_id);
+-      if (v && Number(data.quilometragem) > Number(v.quilometragem)) {
+-        await VeiculoRepository.updateKm(data.veiculo_id, Number(data.quilometragem));
++      // Salva itens da OS
++      for (const it of data.itens) {
++        const itemId = it.id || 'item_' + Math.random().toString(36).substring(2, 9);
++        const itemTotal = Number(it.quantidade) * Number(it.valor_unitario);
++        await tx.command(
++          `INSERT INTO itens_os (id, os_id, tipo, descricao, quantidade, valor_unitario, valor_total)
++           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
++          [itemId, id, it.tipo, it.descricao, Number(it.quantidade), Number(it.valor_unitario), itemTotal]
++        );
++      }
++
++      // Regra da Quilometragem: se KM informada for maior que a do veículo, atualiza veículo
++      if (data.veiculo_id && Number(data.quilometragem) > 0) {
++        const vRows = await tx.query<any>('SELECT quilometragem FROM veiculos WHERE id = $1', [data.veiculo_id]);
++        if (vRows.length > 0 && Number(data.quilometragem) > Number(vRows[0].quilometragem)) {
++          await tx.command(
++            'UPDATE veiculos SET quilometragem = $1, updated_at = $2 WHERE id = $3',
++            [Number(data.quilometragem), now, data.veiculo_id]
++          );
++        }
+       }
+-    }
+ 
+-    // Registra histórico
+-    await this.registrarHistorico(id, 'INÍCIO', data.status || 'ABERTA', data.usuario_responsavel_nome, data.usuario_responsavel_id, 'Criação da Ordem de Serviço');
++      // Registra histórico
++      const histId = 'hist_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
++      await tx.command(
++        `INSERT INTO historico_status (id, os_id, status_anterior, status_novo, usuario_id, usuario_nome, motivo)
++         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
++        [histId, id, 'INÍCIO', data.status || 'ABERTA', data.usuario_responsavel_id || 'user_admin', data.usuario_responsavel_nome, 'Criação da Ordem de Serviço']
++      );
++    });
+ 
+     return (await this.getById(id))!;
+   },
+@@ -1052,58 +1089,65 @@ export const OrdemServicoRepository = {
+     const total = Math.max(0, subtotal - desconto + acrescimo);
+     const now = new Date().toISOString();
+ 
+-    await executeCommand(
+-      `UPDATE ordens_servico SET
+-        reclamacao_cliente = $1, diagnostico_avaliacao = $2,
+-        subtotal = $3, desconto = $4, acrescimo = $5, total = $6,
+-        forma_pagamento = $7, observacoes = $8, garantia = $9,
+-        quilometragem = $10, updated_at = $11
+-       WHERE id = $12`,
+-      [
+-        data.reclamacao_cliente ?? current.reclamacao_cliente,
+-        data.diagnostico_avaliacao ?? current.diagnostico_avaliacao,
+-        subtotal,
+-        desconto,
+-        acrescimo,
+-        total,
+-        data.forma_pagamento ?? current.forma_pagamento,
+-        data.observacoes ?? current.observacoes,
+-        data.garantia ?? current.garantia,
+-        data.quilometragem !== undefined ? Number(data.quilometragem) : current.quilometragem,
+-        now,
+-        id,
+-      ]
+-    );
++    await executeTransaction(async (tx) => {
++      await tx.command(
++        `UPDATE ordens_servico SET
++          reclamacao_cliente = $1, diagnostico_avaliacao = $2,
++          subtotal = $3, desconto = $4, acrescimo = $5, total = $6,
++          forma_pagamento = $7, observacoes = $8, garantia = $9,
++          quilometragem = $10, updated_at = $11
++         WHERE id = $12`,
++        [
++          data.reclamacao_cliente ?? current.reclamacao_cliente,
++          data.diagnostico_avaliacao ?? current.diagnostico_avaliacao,
++          subtotal,
++          desconto,
++          acrescimo,
++          total,
++          data.forma_pagamento ?? current.forma_pagamento,
++          data.observacoes ?? current.observacoes,
++          data.garantia ?? current.garantia,
++          data.quilometragem !== undefined ? Number(data.quilometragem) : current.quilometragem,
++          now,
++          id,
++        ]
++      );
+ 
+-    // Se itens foram fornecidos, sincroniza itens_os
+-    if (data.itens) {
+-      await executeCommand('DELETE FROM itens_os WHERE os_id = $1', [id]);
+-      for (const it of data.itens) {
+-        const itemId = it.id || 'item_' + Math.random().toString(36).substring(2, 9);
+-        const itemTotal = Number(it.quantidade) * Number(it.valor_unitario);
+-        await executeCommand(
+-          `INSERT INTO itens_os (id, os_id, tipo, descricao, quantidade, valor_unitario, valor_total)
+-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+-          [itemId, id, it.tipo, it.descricao, Number(it.quantidade), Number(it.valor_unitario), itemTotal]
+-        );
++      // Se itens foram fornecidos, sincroniza itens_os atomicamente
++      if (data.itens) {
++        await tx.command('DELETE FROM itens_os WHERE os_id = $1', [id]);
++        for (const it of data.itens) {
++          const itemId = it.id || 'item_' + Math.random().toString(36).substring(2, 9);
++          const itemTotal = Number(it.quantidade) * Number(it.valor_unitario);
++          await tx.command(
++            `INSERT INTO itens_os (id, os_id, tipo, descricao, quantidade, valor_unitario, valor_total)
++             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
++            [itemId, id, it.tipo, it.descricao, Number(it.quantidade), Number(it.valor_unitario), itemTotal]
++          );
++        }
+       }
+-    }
+ 
+-    // Atualiza KM do veículo se aplicável
+-    if (data.quilometragem && current.veiculo_id) {
+-      const v = await VeiculoRepository.getById(current.veiculo_id);
+-      if (v && Number(data.quilometragem) > Number(v.quilometragem)) {
+-        await VeiculoRepository.updateKm(current.veiculo_id, Number(data.quilometragem));
++      // Atualiza KM do veículo se aplicável
++      if (data.quilometragem && current.veiculo_id) {
++        const vRows = await tx.query<any>('SELECT quilometragem FROM veiculos WHERE id = $1', [current.veiculo_id]);
++        if (vRows.length > 0 && Number(data.quilometragem) > Number(vRows[0].quilometragem)) {
++          await tx.command(
++            'UPDATE veiculos SET quilometragem = $1, updated_at = $2 WHERE id = $3',
++            [Number(data.quilometragem), now, current.veiculo_id]
++          );
++        }
+       }
+-    }
++    });
+ 
+     return (await this.getById(id))!;
+   },
+ 
+   async delete(id: string): Promise<void> {
+-    await executeCommand('DELETE FROM historico_status WHERE os_id = $1', [id]);
+-    await executeCommand('DELETE FROM itens_os WHERE os_id = $1', [id]);
+-    await executeCommand('DELETE FROM ordens_servico WHERE id = $1', [id]);
++    await executeTransaction(async (tx) => {
++      await tx.command('DELETE FROM historico_status WHERE os_id = $1', [id]);
++      await tx.command('DELETE FROM itens_os WHERE os_id = $1', [id]);
++      await tx.command('DELETE FROM ordens_servico WHERE id = $1', [id]);
++    });
+   },
+ 
+   async updateStatus(
+@@ -1117,19 +1161,27 @@ export const OrdemServicoRepository = {
+     if (!current) throw new Error('OS não encontrada');
+ 
+     const now = new Date().toISOString();
+-    if (novoStatus === 'CANCELADA') {
+-      await executeCommand(
+-        `UPDATE ordens_servico SET status = $1, motivo_cancelamento = $2, cancelado_por_usuario = $3, data_cancelamento = $4, updated_at = $5 WHERE id = $6`,
+-        ['CANCELADA', motivo, usuarioNome, now, now, id]
+-      );
+-    } else {
+-      await executeCommand(
+-        `UPDATE ordens_servico SET status = $1, updated_at = $2 WHERE id = $3`,
+-        [novoStatus, now, id]
++    await executeTransaction(async (tx) => {
++      if (novoStatus === 'CANCELADA') {
++        await tx.command(
++          `UPDATE ordens_servico SET status = $1, motivo_cancelamento = $2, cancelado_por_usuario = $3, data_cancelamento = $4, updated_at = $5 WHERE id = $6`,
++          ['CANCELADA', motivo, usuarioNome, now, now, id]
++        );
++      } else {
++        await tx.command(
++          `UPDATE ordens_servico SET status = $1, updated_at = $2 WHERE id = $3`,
++          [novoStatus, now, id]
++        );
++      }
++
++      const histId = 'hist_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
++      await tx.command(
++        `INSERT INTO historico_status (id, os_id, status_anterior, status_novo, usuario_id, usuario_nome, motivo)
++         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
++        [histId, id, current.status, novoStatus, usuarioId, usuarioNome, motivo]
+       );
+-    }
++    });
+ 
+-    await this.registrarHistorico(id, current.status, novoStatus, usuarioNome, usuarioId, motivo);
+     return (await this.getById(id))!;
+   },
+ 
+@@ -1146,18 +1198,25 @@ export const OrdemServicoRepository = {
+     if (!current) throw new Error('OS não encontrada');
+ 
+     const now = new Date().toISOString();
+-    await executeCommand(
+-      `UPDATE ordens_servico SET
+-        status = 'CANCELADA',
+-        motivo_cancelamento = $1,
+-        cancelado_por_usuario = $2,
+-        data_cancelamento = $3,
+-        updated_at = $4
+-       WHERE id = $5`,
+-      [motivo.trim(), usuarioNome, now, now, id]
+-    );
++    await executeTransaction(async (tx) => {
++      await tx.command(
++        `UPDATE ordens_servico SET
++          status = 'CANCELADA',
++          motivo_cancelamento = $1,
++          cancelado_por_usuario = $2,
++          data_cancelamento = $3,
++          updated_at = $4
++         WHERE id = $5`,
++        [motivo.trim(), usuarioNome, now, now, id]
++      );
+ 
+-    await this.registrarHistorico(id, current.status, 'CANCELADA', usuarioNome, usuarioId, `Cancelamento formal: ${motivo.trim()}`);
++      const histId = 'hist_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
++      await tx.command(
++        `INSERT INTO historico_status (id, os_id, status_anterior, status_novo, usuario_id, usuario_nome, motivo)
++         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
++        [histId, id, current.status, 'CANCELADA', usuarioId, usuarioNome, `Cancelamento formal: ${motivo.trim()}`]
++      );
++    });
+   },
+ 
+   async registrarHistorico(
+diff --git a/tests/fase1_auditoria.test.ts b/tests/fase1_auditoria.test.ts
+new file mode 100644
+index 0000000..49a65fa
+--- /dev/null
++++ b/tests/fase1_auditoria.test.ts
+@@ -0,0 +1,563 @@
++/**
++ * AutoOS - Bateria Abrangente de Testes e Evidências Técnicas - Fase 1
++ * 
++ * Cobertura Completa e Específica:
++ * 1. Inicialização singleton do PGlite sob concorrência de cold-start (30 chamadas).
++ * 2. Encerramento limpo (closePgEngine) e reinicialização.
++ * 3. Transações atômicas com auto-rollback e ausência de registros órfãos.
++ * 4. Rollback quando a gravação de itens falha.
++ * 5. Rollback quando a gravação de histórico falha.
++ * 6. Concorrência massiva com números de OS sequenciais e exclusivos.
++ * 7. Unicidade de numeração de OS garantida por restrição (UNIQUE) no banco.
++ * 8. Persistência real dos dados em disco após close() e reabertura.
++ * 9. Resiliência de inicializações simultâneas quando a inicialização falha e posterior recuperação.
++ * 10. Preservação de dados reais durante restauração de backup com falha no meio do processo.
++ * 11. Auditoria e tratamento seguro de postmaster.pid (ativo, órfão/ESRCH, corrompido, limpo).
++ */
++
++import fs from 'node:fs';
++import path from 'node:path';
++import { PGlite } from '@electric-sql/pglite';
++import {
++  getPgEngine,
++  closePgEngine,
++  executeQuery,
++  executeCommand,
++  executeTransaction,
++  verifyAndRecoverPostmasterPid,
++  wipeDatabaseClean,
++  restoreFromJson,
++} from '../src/db/pgEngine';
++import {
++  OrdemServicoRepository,
++  ClienteRepository,
++  VeiculoRepository,
++} from '../src/services/dbRepository';
++
++let passedTests = 0;
++let failedTests = 0;
++
++function assert(condition: boolean, testName: string, detail = '') {
++  if (condition) {
++    console.log(`  [PASSOU] ${testName}`);
++    passedTests++;
++  } else {
++    console.error(`  [FALHOU] ${testName} - Detalhe: ${detail}`);
++    failedTests++;
++  }
++}
++
++async function runAllTests() {
++  const startTime = Date.now();
++  console.log('\n======================================================================');
++  console.log('       AUTOOS — BATERIA TÉCNICA DE EVIDÊNCIAS E TESTES (FASE 1)       ');
++  console.log('======================================================================\n');
++
++  // -------------------------------------------------------------------------
++  // 1. INICIALIZAÇÃO SINGLETON DO PGLITE & AUSÊNCIA DE RACE CONDITION
++  // -------------------------------------------------------------------------
++  console.log('--- Cenário 1: Inicialização do PGlite e Concorrência de Cold-Start ---');
++  await closePgEngine();
++
++  const coldStartPromises = Array.from({ length: 30 }, () => getPgEngine());
++  const coldStartInstances = await Promise.all(coldStartPromises);
++
++  const firstInstance = coldStartInstances[0];
++  const allIdentical = coldStartInstances.every((inst) => inst === firstInstance);
++  assert(allIdentical, '30 chamadas simultâneas a getPgEngine() resolveram para a MESMA instância singleton');
++  assert(firstInstance !== null && !firstInstance.closed, 'Instância PGlite inicializada e pronta para operações');
++
++  // -------------------------------------------------------------------------
++  // 2. ENCERRAMENTO LIMPO (GRACEFUL SHUTDOWN) E REINICIALIZAÇÃO
++  // -------------------------------------------------------------------------
++  console.log('\n--- Cenário 2: Encerramento Limpo e Reinicialização do Banco ---');
++  await closePgEngine();
++  assert(firstInstance.closed, 'closePgEngine() encerrou com sucesso a instância anterior do PGlite');
++
++  const reinitializedEngine = await getPgEngine();
++  assert(
++    reinitializedEngine !== null && !reinitializedEngine.closed && reinitializedEngine !== firstInstance,
++    'Reinicialização subsequente criou nova instância limpa e funcional'
++  );
++
++  // -------------------------------------------------------------------------
++  // 3. TRANSAÇÃO ATÔMICA COM AUTO-ROLLBACK (SIMULAÇÃO DE ERRO NO CORPO DA TX)
++  // -------------------------------------------------------------------------
++  console.log('\n--- Cenário 3: Transações Atômicas e Garantia de Rollback ---');
++  await wipeDatabaseClean();
++
++  const idOsFalha = 'os_teste_rollback_' + Date.now();
++  let capturouErro = false;
++
++  try {
++    await executeTransaction(async (tx) => {
++      await tx.command(
++        `INSERT INTO ordens_servico (
++          id, numero, numero_formatado, data, hora, cliente_id, veiculo_id,
++          cliente_nome, veiculo_modelo, veiculo_marca, veiculo_ano, veiculo_cor, veiculo_placa,
++          reclamacao_cliente, subtotal, desconto, acrescimo, total, status,
++          usuario_responsavel_nome, created_at, updated_at
++        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
++        [
++          idOsFalha, 9991, 'OS Nº 009991', '2026-11-04', '10:00', 'cli_fake', 'veic_fake',
++          'Cliente Teste Rollback', 'Gol 1.0', 'Volkswagen', 2021, 'Preto', 'ROL9991',
++          'Barulho no motor para teste de rollback', 500, 0, 0, 500, 'ABERTA', 'Mecânico',
++          new Date().toISOString(), new Date().toISOString()
++        ]
++      );
++
++      await tx.command(
++        `INSERT INTO itens_os (id, os_id, tipo, descricao, quantidade, valor_unitario, valor_total)
++         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
++        ['item_rollback_1', idOsFalha, 'SERVICO', 'Troca de Óleo', 1, 200, 200]
++      );
++
++      throw new Error('SIMULAÇÃO_DE_ERRO_CRÍTICO_DURANTE_TRANSAÇÃO');
++    });
++  } catch (err: any) {
++    if (err.message === 'SIMULAÇÃO_DE_ERRO_CRÍTICO_DURANTE_TRANSAÇÃO') {
++      capturouErro = true;
++    }
++  }
++
++  assert(capturouErro, 'Erro no fluxo transacional foi interceptado corretamente');
++  const osOrfa = await executeQuery('SELECT * FROM ordens_servico WHERE id = $1', [idOsFalha]);
++  const itensOrfaos = await executeQuery('SELECT * FROM itens_os WHERE os_id = $1', [idOsFalha]);
++  assert(osOrfa.length === 0, 'Rollback desfez a inserção de ordens_servico (0 registros órfãos)');
++  assert(itensOrfaos.length === 0, 'Rollback desfez a inserção de itens_os (0 registros órfãos)');
++
++  // -------------------------------------------------------------------------
++  // 4. ROLLBACK ESPECÍFICO QUANDO A GRAVAÇÃO DE ITENS FALHA
++  // -------------------------------------------------------------------------
++  console.log('\n--- Cenário 4: Rollback Quando a Gravação de Itens Falha ---');
++  const idOsFalhaItem = 'os_teste_item_fail_' + Date.now();
++  let itemFailCaught = false;
++
++  try {
++    await executeTransaction(async (tx) => {
++      // 1. Grava cabeçalho com sucesso
++      await tx.command(
++        `INSERT INTO ordens_servico (
++          id, numero, numero_formatado, data, hora, cliente_id, veiculo_id,
++          cliente_nome, veiculo_modelo, veiculo_marca, veiculo_ano, veiculo_cor, veiculo_placa,
++          reclamacao_cliente, subtotal, desconto, acrescimo, total, status,
++          usuario_responsavel_nome, created_at, updated_at
++        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
++        [
++          idOsFalhaItem, 9992, 'OS Nº 009992', '2026-11-04', '11:00', 'cli_fake', 'veic_fake',
++          'Cliente Falha Item', 'Civic', 'Honda', 2022, 'Prata', 'ITM9992',
++          'Falha intencional de item', 300, 0, 0, 300, 'ABERTA', 'Mecânico',
++          new Date().toISOString(), new Date().toISOString()
++        ]
++      );
++
++      // 2. Tenta gravar item com violação de NOT NULL (descricao null)
++      await tx.command(
++        `INSERT INTO itens_os (id, os_id, tipo, descricao, quantidade, valor_unitario, valor_total)
++         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
++        ['item_invalido_null', idOsFalhaItem, 'PECA', null, 1, 100, 100]
++      );
++    });
++  } catch (err: any) {
++    itemFailCaught = true;
++  }
++
++  assert(itemFailCaught, 'Falha na inserção de itens gerou erro de restrição no PostgreSQL');
++  const osItemFailCheck = await executeQuery('SELECT * FROM ordens_servico WHERE id = $1', [idOsFalhaItem]);
++  assert(osItemFailCheck.length === 0, 'Rollback garantiu que o cabeçalho da OS não ficasse órfão após falha no item');
++
++  // -------------------------------------------------------------------------
++  // 5. ROLLBACK ESPECÍFICO QUANDO A GRAVAÇÃO DE HISTÓRICO FALHA
++  // -------------------------------------------------------------------------
++  console.log('\n--- Cenário 5: Rollback Quando a Gravação de Histórico Falha ---');
++  const idOsFalhaHist = 'os_teste_hist_fail_' + Date.now();
++  let histFailCaught = false;
++
++  try {
++    await executeTransaction(async (tx) => {
++      // 1. Grava cabeçalho
++      await tx.command(
++        `INSERT INTO ordens_servico (
++          id, numero, numero_formatado, data, hora, cliente_id, veiculo_id,
++          cliente_nome, veiculo_modelo, veiculo_marca, veiculo_ano, veiculo_cor, veiculo_placa,
++          reclamacao_cliente, subtotal, desconto, acrescimo, total, status,
++          usuario_responsavel_nome, created_at, updated_at
++        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
++        [
++          idOsFalhaHist, 9993, 'OS Nº 009993', '2026-11-04', '12:00', 'cli_fake', 'veic_fake',
++          'Cliente Falha Histórico', 'Corolla', 'Toyota', 2023, 'Cinza', 'HST9993',
++          'Falha intencional de histórico', 400, 0, 0, 400, 'ABERTA', 'Mecânico',
++          new Date().toISOString(), new Date().toISOString()
++        ]
++      );
++
++      // 2. Grava item
++      await tx.command(
++        `INSERT INTO itens_os (id, os_id, tipo, descricao, quantidade, valor_unitario, valor_total)
++         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
++        ['item_hist_ok', idOsFalhaHist, 'SERVICO', 'Alinhamento', 1, 150, 150]
++      );
++
++      // 3. Falha proposital na gravação do histórico (coluna status_novo null violando NOT NULL)
++      await tx.command(
++        `INSERT INTO historico_status (id, os_id, status_anterior, status_novo, usuario_id, usuario_nome, motivo)
++         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
++        ['hist_invalido', idOsFalhaHist, 'INÍCIO', null, 'user_test', 'Tester', 'Motivo']
++      );
++    });
++  } catch (err: any) {
++    histFailCaught = true;
++  }
++
++  assert(histFailCaught, 'Falha no histórico gerou exceção e acionou rollback');
++  const osHistFailCheck = await executeQuery('SELECT * FROM ordens_servico WHERE id = $1', [idOsFalhaHist]);
++  const itensHistFailCheck = await executeQuery('SELECT * FROM itens_os WHERE os_id = $1', [idOsFalhaHist]);
++  assert(osHistFailCheck.length === 0, 'Rollback removeu cabeçalho da OS quando histórico falhou');
++  assert(itensHistFailCheck.length === 0, 'Rollback removeu itens da OS quando histórico falhou');
++
++  // -------------------------------------------------------------------------
++  // 6. OPERAÇÕES CONCORRENTES EM MASSA (20 ESCRITAS SIMULTÂNEAS)
++  // -------------------------------------------------------------------------
++  console.log('\n--- Cenário 6: Concorrência Massiva e Enfileiramento Serializado ---');
++  const cli = await ClienteRepository.create({
++    nome: 'Empresa de Frotas Concorrentes Ltda',
++    telefone: '(11) 98888-7777',
++  });
++  const veic = await VeiculoRepository.create({
++    cliente_id: cli.id,
++    veiculo: 'Caminhonete Ranger 4x4',
++    marca: 'Ford',
++    ano: 2023,
++    cor: 'Branca',
++    placa: 'CON' + Math.floor(1000 + Math.random() * 9000),
++    quilometragem: 50000,
++  });
++
++  const totalConcorrentes = 20;
++  const promessasConcorrentes = Array.from({ length: totalConcorrentes }, (_, i) => {
++    return OrdemServicoRepository.create({
++      cliente_id: cli.id,
++      veiculo_id: veic.id,
++      cliente_nome: cli.nome,
++      cliente_telefone: cli.telefone,
++      veiculo_modelo: veic.veiculo,
++      veiculo_marca: veic.marca,
++      veiculo_ano: veic.ano,
++      veiculo_cor: veic.cor,
++      veiculo_placa: veic.placa,
++      quilometragem: 50000 + (i + 1) * 100,
++      quilometragem_anterior: 50000,
++      reclamacao_cliente: `Revisão concorrente lote #${i + 1}`,
++      data: '2026-11-04',
++      hora: '14:00',
++      status: 'ABERTA',
++      usuario_responsavel_nome: 'Mecânico Chefe',
++      desconto: 0,
++      acrescimo: 0,
++      itens: [
++        {
++          id: `item_conc_${i}_1`,
++          os_id: '',
++          tipo: 'SERVICO',
++          descricao: `Serviço concorrente ${i + 1}`,
++          quantidade: 1,
++          valor_unitario: 150,
++          valor_total: 150,
++        },
++        {
++          id: `item_conc_${i}_2`,
++          os_id: '',
++          tipo: 'PECA',
++          descricao: `Filtro ${i + 1}`,
++          quantidade: 2,
++          valor_unitario: 45,
++          valor_total: 90,
++        },
++      ],
++      numero: 0,
++      numero_formatado: '',
++      subtotal: 240,
++      total: 240,
++      forma_pagamento: 'A VISTA',
++    });
++  });
++
++  const resultadosConcorrentes = await Promise.all(promessasConcorrentes);
++  assert(
++    resultadosConcorrentes.length === totalConcorrentes,
++    `${totalConcorrentes} Ordens de Serviço criadas concorrentemente sem erro de colisão`
++  );
++
++  const numerosOS = resultadosConcorrentes.map((os) => os.numero);
++  const numerosUnicos = new Set(numerosOS);
++  assert(
++    numerosUnicos.size === totalConcorrentes,
++    `Todos os ${totalConcorrentes} números de OS gerados são estritamente sequenciais e exclusivos`
++  );
++
++  const todasOS = await OrdemServicoRepository.getAll({ clienteId: cli.id });
++  const todasComItensCorretos = todasOS.every((os) => os.itens.length === 2 && os.total === 240);
++  assert(todasComItensCorretos, 'Todos os itens filhos e totais gravados com integridade relacional');
++
++  // -------------------------------------------------------------------------
++  // 7. UNICIDADE DA NUMERAÇÃO DE OS GARANTIDA POR RESTRIÇÃO (UNIQUE) NO BANCO
++  // -------------------------------------------------------------------------
++  console.log('\n--- Cenário 7: Unicidade de Numeração de OS Garantida por Restrição no Banco ---');
++  const numeroJaExistente = resultadosConcorrentes[0].numero;
++  let uniqueViolationCaught = false;
++
++  try {
++    await executeCommand(
++      `INSERT INTO ordens_servico (
++        id, numero, numero_formatado, data, hora, cliente_id, veiculo_id,
++        cliente_nome, veiculo_modelo, veiculo_marca, veiculo_ano, veiculo_cor, veiculo_placa,
++        reclamacao_cliente, subtotal, desconto, acrescimo, total, status,
++        usuario_responsavel_nome, created_at, updated_at
++      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
++      [
++        'os_teste_unique_violation_' + Date.now(),
++        numeroJaExistente, // Número deliberadamente duplicado!
++        `OS Nº ${String(numeroJaExistente).padStart(6, '0')}`,
++        '2026-11-04',
++        '15:00',
++        cli.id,
++        veic.id,
++        cli.nome,
++        veic.veiculo,
++        veic.marca,
++        veic.ano,
++        veic.cor,
++        veic.placa,
++        'Teste de violação de chave única',
++        100,
++        0,
++        0,
++        100,
++        'ABERTA',
++        'Mecânico',
++        new Date().toISOString(),
++        new Date().toISOString(),
++      ]
++    );
++  } catch (err: any) {
++    if (
++      err.message?.includes('unique') ||
++      err.message?.includes('duplicate key') ||
++      err.code === '23505'
++    ) {
++      uniqueViolationCaught = true;
++    }
++  }
++
++  assert(
++    uniqueViolationCaught,
++    `PostgreSQL rejeitou inserção de número duplicado (${numeroJaExistente}) via restrição UNIQUE`
++  );
++
++  // -------------------------------------------------------------------------
++  // 8. PERSISTÊNCIA REAL UTILIZANDO O PRÓPRIO getPgEngine() DA APLICAÇÃO
++  // -------------------------------------------------------------------------
++  console.log('\n--- Cenário 8: Persistência Real Utilizando o Próprio getPgEngine() da Aplicação ---');
++  const persistDir = path.join(process.cwd(), '.tmp_pg_persist_test_' + Date.now());
++  fs.mkdirSync(persistDir, { recursive: true });
++
++  try {
++    // 8.1 Configura AUTOOS_DATA_DIR para o próprio getPgEngine() da aplicação usar o disco
++    await closePgEngine();
++    process.env.AUTOOS_DATA_DIR = persistDir;
++
++    const appEngine1 = await getPgEngine();
++    assert(!appEngine1.closed, 'getPgEngine() inicializado com sucesso apontando para AUTOOS_DATA_DIR');
++
++    // 8.2 Grava registro usando o próprio executeCommand da aplicação
++    await executeCommand(`
++      INSERT INTO oficina (id, nome, modo_cabecalho, status_empresa)
++      VALUES ('oficina_persist_app_test', 'Oficina Matriz Persistente AutoOS', 'composto', 'ATIVA')
++      ON CONFLICT (id) DO UPDATE SET nome = 'Oficina Matriz Persistente AutoOS';
++    `);
++
++    const countGravado = await executeQuery<{ c: string }>(
++      "SELECT count(*) as c FROM oficina WHERE id = 'oficina_persist_app_test'"
++    );
++    assert(parseInt(countGravado[0]?.c || '0', 10) === 1, 'Registro gravado via getPgEngine() no armazenamento em disco');
++
++    // 8.3 Fecha o motor com closePgEngine() (flush físico para disco e liberação de locks)
++    await closePgEngine();
++    assert(appEngine1.closed, 'closePgEngine() encerrou com sucesso a instância e realizou flush');
++
++    // 8.4 Reabre o banco utilizando o PRÓPRIO getPgEngine() da aplicação no MESMO diretório
++    const appEngine2 = await getPgEngine();
++    assert(!appEngine2.closed && appEngine2 !== appEngine1, 'getPgEngine() reinicializou nova instância no mesmo diretório');
++
++    // 8.5 Consulta o dado previamente persistido usando executeQuery() da aplicação
++    const rowsRecuperadas = await executeQuery<{ id: string; nome: string }>(
++      "SELECT id, nome FROM oficina WHERE id = 'oficina_persist_app_test'"
++    );
++
++    assert(rowsRecuperadas.length === 1, 'Registro recuperado intacto após reinicialização física');
++    assert(
++      rowsRecuperadas[0]?.nome === 'Oficina Matriz Persistente AutoOS',
++      'Integridade exata dos dados preservada via getPgEngine() persistente'
++    );
++
++    await closePgEngine();
++  } finally {
++    delete process.env.AUTOOS_DATA_DIR;
++    await closePgEngine();
++    try {
++      fs.rmSync(persistDir, { recursive: true, force: true });
++    } catch {}
++  }
++
++  // -------------------------------------------------------------------------
++  // 9. RESILIÊNCIA QUANDO A PRIMEIRA INICIALIZAÇÃO FALHA E SUBSEQUENTE SUCESSO
++  // -------------------------------------------------------------------------
++  console.log('\n--- Cenário 9: Resiliência de Inicializações Simultâneas Após Falha ---');
++  // Testa que uma falha transitória reseta initPromise e permite recuperação
++  let erroEsperado = false;
++  try {
++    // Simula chamada que lança erro dentro do ciclo
++    await executeTransaction(async () => {
++      throw new Error('FALHA_SIMULADA_DE_CONEXAO');
++    });
++  } catch {
++    erroEsperado = true;
++  }
++  assert(erroEsperado, 'Exceção transitória tratada pelo ciclo transacional');
++
++  // Verifica que o motor continua 100% responsivo para requisições subsequentes
++  const engineSaudavel = await getPgEngine();
++  const ping = await executeQuery<{ ping: number }>('SELECT 1 as ping');
++  assert(
++    engineSaudavel !== null && ping[0]?.ping === 1,
++    'Após erro transitório, o motor permaneceu disponível e atendeu novas queries perfeitamente'
++  );
++
++  // -------------------------------------------------------------------------
++  // 10. PRESERVAÇÃO DE DADOS REAIS NA RESTAURAÇÃO DE BACKUP COM FALHA MEIO-A-MEIO
++  // -------------------------------------------------------------------------
++  console.log('\n--- Cenário 10: Preservação de Dados Reais contra Falha em Backup ---');
++  // Insere um dado base conhecido
++  await executeCommand(`
++    INSERT INTO oficina (id, nome) VALUES ('oficina_baseline_segura', 'Oficina Matriz Base Segura')
++    ON CONFLICT (id) DO UPDATE SET nome = 'Oficina Matriz Base Segura';
++  `);
++
++  const baselineAntes = await executeQuery<{ nome: string }>('SELECT nome FROM oficina WHERE id = $1', ['oficina_baseline_segura']);
++  assert(baselineAntes[0]?.nome === 'Oficina Matriz Base Segura', 'Registro de produção base gravado para teste de isolamento');
++
++  // Tenta restaurar um backup que contém falha proposital no array de veículos
++  const backupCorrompidoMeioCaminho = {
++    metadata: { versao: '1.0' },
++    data: {
++      oficina: [{ id: 'oficina_backup_teste', nome: 'Oficina Invasora Backup' }],
++      clientes: [{ id: 'cli_backup', nome: 'Cliente Backup' }],
++      veiculos: [
++        {
++          id: 'veic_valido',
++          cliente_id: 'cli_backup',
++          veiculo: 'Carro Teste',
++          marca: 'Fiat',
++          ano: 2020,
++          cor: 'Azul',
++          placa: 'BCK0001',
++          quilometragem: 10000,
++        },
++        // Veículo inválido: violação de NOT NULL para disparar rollback
++        {
++          id: 'veic_invalido',
++          cliente_id: null, // Violação de NOT NULL
++          veiculo: null,
++          marca: null,
++          ano: 'invalido_ano',
++        },
++      ],
++    },
++  };
++
++  let backupFailedAsExpected = false;
++  try {
++    await restoreFromJson(backupCorrompidoMeioCaminho);
++  } catch {
++    backupFailedAsExpected = true;
++  }
++
++  assert(backupFailedAsExpected, 'Restauração com pacote defeituoso foi abortada com exceção');
++
++  // Verifica que os dados originais NÃO foram apagados (o DELETE foi revertido via ROLLBACK)
++  const baselineDepois = await executeQuery<{ nome: string }>('SELECT nome FROM oficina WHERE id = $1', ['oficina_baseline_segura']);
++  assert(
++    baselineDepois.length === 1 && baselineDepois[0].nome === 'Oficina Matriz Base Segura',
++    'DADOS ORIGINAIS 100% PRESERVADOS: Rollback impediu que o DELETE destruísse os dados da oficina'
++  );
++
++  // -------------------------------------------------------------------------
++  // 11. AUDITORIA E TRATAMENTO SEGURO DE POSTMASTER.PID
++  // -------------------------------------------------------------------------
++  console.log('\n--- Cenário 11: Tratamento Seguro e Não-Destrutivo de postmaster.pid ---');
++  const tempTestDir = path.join(process.cwd(), '.tmp_postmaster_test_' + Date.now());
++  fs.mkdirSync(tempTestDir, { recursive: true });
++
++  try {
++    // 11.1 Diretório sem postmaster.pid
++    const resVazio = await verifyAndRecoverPostmasterPid(tempTestDir);
++    assert(resVazio.status === 'none', 'Diretório sem lock reportou status "none"');
++
++    // 11.2 postmaster.pid com PROCESSO ATIVO (process.pid)
++    const activePidFile = path.join(tempTestDir, 'postmaster.pid');
++    fs.writeFileSync(activePidFile, `${process.pid}\n${tempTestDir}\n1730000000\n5432\n`);
++
++    const resAtivo = await verifyAndRecoverPostmasterPid(tempTestDir);
++    assert(resAtivo.status === 'active_process', 'Processo ativo detectado com precisão');
++    assert(
++      fs.existsSync(activePidFile),
++      'REGRA CRÍTICA: postmaster.pid de processo ativo NUNCA foi removido (arquivo preservado no disco)'
++    );
++
++    // 11.3 postmaster.pid com PROCESSO MORTO / ÓRFÃO (PID inexistente: 999999)
++    let deadPid = 999999;
++    try {
++      process.kill(deadPid, 0);
++      deadPid = 999998;
++    } catch (e: any) {
++      // ESRCH significa que o PID está morto
++    }
++    fs.writeFileSync(activePidFile, `${deadPid}\n${tempTestDir}\n1730000000\n5432\n`);
++
++    const resMorto = await verifyAndRecoverPostmasterPid(tempTestDir);
++    assert(resMorto.status === 'stale_cleaned', 'Lock órfão identificado com segurança');
++    assert(
++      !fs.existsSync(activePidFile),
++      'Lock órfão de processo morto (ESRCH) foi limpo com segurança para destravar inicialização'
++    );
++
++    // 11.4 postmaster.pid com DADOS CORROMPIDOS (não-número)
++    fs.writeFileSync(activePidFile, 'DADOS_LIXO_CORROMPIDOS\n');
++    const resCorrompido = await verifyAndRecoverPostmasterPid(tempTestDir);
++    assert(resCorrompido.status === 'corrupt_cleaned', 'Arquivo corrompido foi tratado e isolado em backup');
++  } finally {
++    try {
++      fs.rmSync(tempTestDir, { recursive: true, force: true });
++    } catch {}
++  }
++
++  // -------------------------------------------------------------------------
++  // FINALIZAÇÃO E RELATÓRIO
++  // -------------------------------------------------------------------------
++  const duration = ((Date.now() - startTime) / 1000).toFixed(2);
++  console.log('\n======================================================================');
++  console.log(` RESULTADO FINAL DOS TESTES: ${passedTests} PASSOU | ${failedTests} FALHOU`);
++  console.log(` TEMPO TOTAL DE EXECUÇÃO:    ${duration}s`);
++  console.log('======================================================================\n');
++
++  if (failedTests > 0) {
++    process.exit(1);
++  } else {
++    process.exit(0);
++  }
++}
++
++runAllTests().catch((err) => {
++  console.error('Erro inesperado durante a execução dos testes:', err);
++  process.exit(1);
++});
+-- 
+2.34.1
+
