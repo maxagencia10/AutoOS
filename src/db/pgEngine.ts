@@ -224,6 +224,14 @@ CREATE TABLE IF NOT EXISTS sistema_info (
 );
 `;
 
+// Hook para testes unitários de resiliência e injeção controlada de falhas no cold-start
+export let _initFailureInjectorForTesting: (() => Promise<void> | void) | null = null;
+export function _setInitFailureInjectorForTesting(
+  fn: (() => Promise<void> | void) | null
+): void {
+  _initFailureInjectorForTesting = fn;
+}
+
 export async function getPgEngine(): Promise<PGlite> {
   if (pgInstance && isInitialized && !pgInstance.closed) {
     return pgInstance;
@@ -234,15 +242,28 @@ export async function getPgEngine(): Promise<PGlite> {
 
   initPromise = (async () => {
     try {
+      if (_initFailureInjectorForTesting) {
+        await _initFailureInjectorForTesting();
+      }
+
       if (!pgInstance || pgInstance.closed) {
         if (typeof window !== 'undefined' && 'indexedDB' in window) {
           try {
             pgInstance = new PGlite('idb://oficina_mecanica_pg_v1');
             await pgInstance.waitReady;
-          } catch (idbErr) {
-            console.warn('[AutoOS] Falha ao abrir PGlite no IndexedDB, usando em memória:', idbErr);
-            pgInstance = new PGlite();
-            await pgInstance.waitReady;
+          } catch (idbErr: any) {
+            const allowFallback = typeof process !== 'undefined' && process.env?.ALLOW_MEMORY_FALLBACK === 'true';
+            if (allowFallback) {
+              console.warn('[AutoOS] ALLOW_MEMORY_FALLBACK ativo: inicializando em memória após falha do IndexedDB:', idbErr);
+              pgInstance = new PGlite();
+              await pgInstance.waitReady;
+            } else {
+              console.error('[AutoOS] Falha crítica de persistência ao inicializar IndexedDB:', idbErr);
+              throw new Error(
+                `[AutoOS] Falha crítica de persistência: Não foi possível inicializar o banco IndexedDB ('idb://oficina_mecanica_pg_v1'). ` +
+                `Fallback em memória rejeitado para prevenir perda de dados. Detalhes: ${idbErr?.message || String(idbErr)}`
+              );
+            }
           }
         } else {
           // Ambiente Node / Servidor / Testes
@@ -282,6 +303,13 @@ export async function getPgEngine(): Promise<PGlite> {
  */
 export async function closePgEngine(): Promise<void> {
   await dbMutex.runExclusive(async () => {
+    if (initPromise) {
+      try {
+        await initPromise;
+      } catch {
+        // Ignora erro da inicialização anterior para permitir fechamento limpo
+      }
+    }
     if (pgInstance) {
       try {
         if (!pgInstance.closed) {
