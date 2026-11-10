@@ -1,0 +1,550 @@
+From c0bec28817922ba5aae6a4498e45de1f6facfcb2 Mon Sep 17 00:00:00 2001
+From: maxagencia10 <maxagencia10@gmail.com>
+Date: Tue, 10 Nov 2026 14:52:39 +0000
+Subject: [PATCH] fix(fase1): restore OS status history from JSON backups
+
+---
+ src/db/pgEngine.ts            | 223 +++++++++++++++++++++++++++------
+ tests/fase1_auditoria.test.ts | 225 +++++++++++++++++++++++++++++++++-
+ 2 files changed, 410 insertions(+), 38 deletions(-)
+
+diff --git a/src/db/pgEngine.ts b/src/db/pgEngine.ts
+index 0433a6d..51dc49a 100644
+--- a/src/db/pgEngine.ts
++++ b/src/db/pgEngine.ts
+@@ -641,6 +641,7 @@ ${SCHEMA_DDL}
+ 
+ -- Limpeza prévia para restauração idempotente
+ DELETE FROM itens_os;
++DELETE FROM historico_status;
+ DELETE FROM ordens_servico;
+ DELETE FROM veiculos;
+ DELETE FROM clientes;
+@@ -695,6 +696,12 @@ DELETE FROM oficina;
+     sqlDump += `INSERT INTO itens_os VALUES (${escapeSql(item.id)}, ${escapeSql(item.os_id)}, ${escapeSql(item.tipo)}, ${escapeSql(item.descricao)}, ${item.quantidade}, ${item.valor_unitario}, ${item.valor_total});\n`;
+   }
+ 
++  // Histórico de Status
++  const historico = (await db.query<any>(`SELECT * FROM historico_status`)).rows;
++  for (const h of historico) {
++    sqlDump += `INSERT INTO historico_status (id, os_id, status_anterior, status_novo, usuario_id, usuario_nome, motivo, data_hora) VALUES (${escapeSql(h.id)}, ${escapeSql(h.os_id)}, ${escapeSql(h.status_anterior)}, ${escapeSql(h.status_novo)}, ${escapeSql(h.usuario_id)}, ${escapeSql(h.usuario_nome)}, ${escapeSql(h.motivo)}, '${h.data_hora || new Date().toISOString()}');\n`;
++  }
++
+   sqlDump += `\nCOMMIT;\n-- FIM DO DUMP POSTGRESQL\n`;
+   return sqlDump;
+ }
+@@ -758,27 +765,74 @@ export async function restoreFromJson(backupData: any): Promise<void> {
+       DELETE FROM oficina;
+     `);
+ 
+-    // Restaura oficina
++    const toIso = (v: any): string => {
++      if (!v) return new Date().toISOString();
++      if (v instanceof Date) return v.toISOString();
++      return String(v);
++    };
++
++    // Restaura oficina com colunas explicitamente declaradas
+     if (d.oficina && d.oficina.length > 0) {
+       for (const o of d.oficina) {
+         await tx.command(
+-          `INSERT INTO oficina VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
++          `INSERT INTO oficina (
++            id, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
++            cep, logradouro, numero, complemento, bairro, cidade, estado, logo,
++            banner_cabecalho, cabecalho_fundo, cabecalho_logo, cabecalho_escritas,
++            modo_cabecalho, texto_institucional, texto_padrao_garantia, texto_padrao_condicoes,
++            status_empresa, plano, limite_os_mensal, data_expiracao, responsavel_nome, responsavel_contato,
++            created_at, updated_at
++          ) VALUES (
++            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
++            $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
++            $31, $32
++          )`,
+           [
+-            o.id, o.nome, o.razao_social, o.nome_fantasia, o.cnpj, o.telefone, o.whatsapp, o.email,
+-            o.cep, o.logradouro, o.numero, o.complemento, o.bairro, o.cidade, o.estado, o.logo,
+-            o.texto_institucional, o.texto_padrao_garantia, o.texto_padrao_condicoes,
+-            o.created_at || new Date().toISOString(), o.updated_at || new Date().toISOString()
++            o.id,
++            o.nome || 'Oficina',
++            o.razao_social || o.nome || '',
++            o.nome_fantasia || o.nome || '',
++            o.cnpj || '',
++            o.telefone || '',
++            o.whatsapp || '',
++            o.email || '',
++            o.cep || '',
++            o.logradouro || '',
++            o.numero || '',
++            o.complemento || '',
++            o.bairro || '',
++            o.cidade || '',
++            o.estado || '',
++            o.logo || '',
++            o.banner_cabecalho || '',
++            o.cabecalho_fundo || '',
++            o.cabecalho_logo || '',
++            o.cabecalho_escritas || '',
++            o.modo_cabecalho || 'composto',
++            o.texto_institucional || '',
++            o.texto_padrao_garantia || '',
++            o.texto_padrao_condicoes || '',
++            o.status_empresa || 'ATIVA',
++            o.plano || 'PRO',
++            Number(o.limite_os_mensal) || 500,
++            o.data_expiracao || '',
++            o.responsavel_nome || '',
++            o.responsavel_contato || '',
++            toIso(o.created_at),
++            toIso(o.updated_at),
+           ]
+         );
+       }
+     }
+ 
+-    // Restaura usuários
++    // Restaura usuários com colunas explicitamente declaradas
+     if (d.usuarios) {
+       for (const u of d.usuarios) {
+         await tx.command(
+-          `INSERT INTO usuarios (id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro, cidade, estado, perfil, ativo, created_at, updated_at)
+-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
++          `INSERT INTO usuarios (
++            id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro,
++            cidade, estado, perfil, ativo, created_at, updated_at
++          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+           [
+             u.id,
+             u.oficina_id || 'oficina_matriz',
+@@ -794,66 +848,165 @@ export async function restoreFromJson(backupData: any): Promise<void> {
+             u.estado || '',
+             u.perfil,
+             u.ativo ?? true,
+-            u.created_at || new Date().toISOString(),
+-            u.updated_at || new Date().toISOString(),
++            toIso(u.created_at),
++            toIso(u.updated_at),
+           ]
+         );
+       }
+     }
+ 
+-    // Restaura clientes
++    // Restaura clientes com colunas explicitamente declaradas
+     if (d.clientes) {
+       for (const c of d.clientes) {
+         await tx.command(
+-          `INSERT INTO clientes VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
++          `INSERT INTO clientes (
++            id, oficina_id, nome, cpf_cnpj, telefone, whatsapp, email, cep, logradouro,
++            numero, complemento, bairro, cidade, estado, created_at, updated_at
++          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+           [
+-            c.id, c.oficina_id, c.nome, c.cpf_cnpj, c.telefone, c.whatsapp, c.email,
+-            c.cep, c.logradouro, c.numero, c.complemento, c.bairro, c.cidade, c.estado,
+-            c.created_at || new Date().toISOString(), c.updated_at || new Date().toISOString()
++            c.id,
++            c.oficina_id || 'oficina_matriz',
++            c.nome,
++            c.cpf_cnpj || '',
++            c.telefone || '',
++            c.whatsapp || '',
++            c.email || '',
++            c.cep || '',
++            c.logradouro || '',
++            c.numero || '',
++            c.complemento || '',
++            c.bairro || '',
++            c.cidade || '',
++            c.estado || '',
++            toIso(c.created_at),
++            toIso(c.updated_at),
+           ]
+         );
+       }
+     }
+ 
+-    // Restaura veículos
++    // Restaura veículos com colunas explicitamente declaradas
+     if (d.veiculos) {
+       for (const v of d.veiculos) {
+         await tx.command(
+-          `INSERT INTO veiculos VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+-          [v.id, v.cliente_id, v.veiculo, v.marca, v.ano, v.cor, v.placa, v.quilometragem, v.created_at || new Date().toISOString(), v.updated_at || new Date().toISOString()]
++          `INSERT INTO veiculos (
++            id, cliente_id, veiculo, marca, ano, cor, placa, quilometragem, created_at, updated_at
++          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
++          [
++            v.id,
++            v.cliente_id,
++            v.veiculo,
++            v.marca,
++            Number(v.ano),
++            v.cor,
++            v.placa,
++            Number(v.quilometragem) || 0,
++            toIso(v.created_at),
++            toIso(v.updated_at),
++          ]
+         );
+       }
+     }
+ 
+-    // Restaura ordens_servico
++    // Restaura ordens_servico com colunas explicitamente declaradas
+     if (d.ordens_servico) {
+       for (const o of d.ordens_servico) {
+         await tx.command(
+-          `INSERT INTO ordens_servico VALUES (
+-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+-            $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
+-            $33, $34, $35, $36, $37, $38
++          `INSERT INTO ordens_servico (
++            id, oficina_id, numero, numero_formatado, data, hora, cliente_id, veiculo_id,
++            cliente_nome, cliente_cpf_cnpj, cliente_telefone, cliente_whatsapp, cliente_email,
++            cliente_endereco, cliente_cep, veiculo_modelo, veiculo_marca, veiculo_ano,
++            veiculo_cor, veiculo_placa, quilometragem, quilometragem_anterior,
++            reclamacao_cliente, diagnostico_avaliacao, subtotal, desconto, acrescimo,
++            total, forma_pagamento, observacoes, garantia, status,
++            motivo_cancelamento, cancelado_por_usuario, data_cancelamento,
++            usuario_responsavel_id, usuario_responsavel_nome, created_at, updated_at
++          ) VALUES (
++            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
++            $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39
+           )`,
+           [
+-            o.id, o.numero, o.numero_formatado, o.data, o.hora, o.cliente_id, o.veiculo_id,
+-            o.cliente_nome, o.cliente_cpf_cnpj, o.cliente_telefone, o.cliente_whatsapp, o.cliente_email,
+-            o.cliente_endereco, o.cliente_cep, o.veiculo_modelo, o.veiculo_marca, o.veiculo_ano,
+-            o.veiculo_cor, o.veiculo_placa, o.quilometragem, o.quilometragem_anterior || 0,
+-            o.reclamacao_cliente, o.diagnostico_avaliacao, o.subtotal, o.desconto, o.acrescimo,
+-            o.total, o.forma_pagamento, o.observacoes, o.garantia, o.status,
+-            o.motivo_cancelamento, o.cancelado_por_usuario, o.data_cancelamento,
+-            o.usuario_responsavel_id, o.usuario_responsavel_nome, o.created_at || new Date().toISOString(), o.updated_at || new Date().toISOString()
++            o.id,
++            o.oficina_id || 'oficina_matriz',
++            Number(o.numero),
++            o.numero_formatado || `OS Nº ${String(o.numero).padStart(6, '0')}`,
++            o.data || '',
++            o.hora || '',
++            o.cliente_id,
++            o.veiculo_id,
++            o.cliente_nome,
++            o.cliente_cpf_cnpj || '',
++            o.cliente_telefone || '',
++            o.cliente_whatsapp || '',
++            o.cliente_email || '',
++            o.cliente_endereco || '',
++            o.cliente_cep || '',
++            o.veiculo_modelo,
++            o.veiculo_marca,
++            Number(o.veiculo_ano),
++            o.veiculo_cor,
++            o.veiculo_placa,
++            Number(o.quilometragem) || 0,
++            Number(o.quilometragem_anterior) || 0,
++            o.reclamacao_cliente,
++            o.diagnostico_avaliacao || '',
++            Number(o.subtotal) || 0,
++            Number(o.desconto) || 0,
++            Number(o.acrescimo) || 0,
++            Number(o.total) || 0,
++            o.forma_pagamento || 'Pix',
++            o.observacoes || '',
++            o.garantia || '',
++            o.status || 'ABERTA',
++            o.motivo_cancelamento || null,
++            o.cancelado_por_usuario || null,
++            o.data_cancelamento || null,
++            o.usuario_responsavel_id || null,
++            o.usuario_responsavel_nome || '',
++            toIso(o.created_at),
++            toIso(o.updated_at),
+           ]
+         );
+       }
+     }
+ 
+-    // Restaura itens_os
++    // Restaura itens_os com colunas explicitamente declaradas
+     if (d.itens_os) {
+       for (const it of d.itens_os) {
+         await tx.command(
+-          `INSERT INTO itens_os VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+-          [it.id, it.os_id, it.tipo, it.descricao, it.quantidade, it.valor_unitario, it.valor_total]
++          `INSERT INTO itens_os (
++            id, os_id, tipo, descricao, quantidade, valor_unitario, valor_total
++          ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
++          [
++            it.id,
++            it.os_id,
++            it.tipo,
++            it.descricao,
++            Number(it.quantidade) || 1,
++            Number(it.valor_unitario) || 0,
++            Number(it.valor_total) || 0,
++          ]
++        );
++      }
++    }
++
++    // Restaura historico_status com integridade referencial e colunas explicitamente declaradas
++    if (d.historico_status && Array.isArray(d.historico_status)) {
++      for (const h of d.historico_status) {
++        await tx.command(
++          `INSERT INTO historico_status (
++            id, os_id, status_anterior, status_novo, usuario_id, usuario_nome, motivo, data_hora
++          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
++          [
++            h.id,
++            h.os_id,
++            h.status_anterior,
++            h.status_novo,
++            h.usuario_id || null,
++            h.usuario_nome,
++            h.motivo || null,
++            toIso(h.data_hora),
++          ]
+         );
+       }
+     }
+diff --git a/tests/fase1_auditoria.test.ts b/tests/fase1_auditoria.test.ts
+index f5443e2..5c257e8 100644
+--- a/tests/fase1_auditoria.test.ts
++++ b/tests/fase1_auditoria.test.ts
+@@ -569,9 +569,228 @@ async function runAllTests() {
+   assert(clienteRestaurado[0]?.nome === 'Cliente Restaurado', 'Backup válido restaurou cliente perfeitamente');
+   assert(veicRestaurado[0]?.placa === 'RES1000', 'Backup válido restaurou veículo com sucesso');
+ 
+-  // -------------------------------------------------------------------------
+-  // 11. AUDITORIA E TRATAMENTO SEGURO DE POSTMASTER.PID (PENDÊNCIA E)
+-  // -------------------------------------------------------------------------
++  // 10.4 Teste A — Restauração Integral do Histórico de Status de OS
++  console.log('    [Subcenário 10.4] Teste A — Restauração Integral do Histórico de Status...');
++  const ofHist = 'oficina_teste_hist_' + Date.now();
++  await executeCommand(`
++    INSERT INTO oficina (id, nome, modo_cabecalho, status_empresa)
++    VALUES ($1, 'Oficina Histórico Teste', 'composto', 'ATIVA')
++  `, [ofHist]);
++
++  const cliHist = await ClienteRepository.create({
++    nome: 'Cliente Para Teste de Histórico',
++    telefone: '(11) 91111-2222',
++  });
++
++  const veicHist = await VeiculoRepository.create({
++    cliente_id: cliHist.id,
++    veiculo: 'Polo TSI 1.0',
++    marca: 'Volkswagen',
++    ano: 2023,
++    cor: 'Cinza',
++    placa: 'HST' + Math.floor(1000 + Math.random() * 9000),
++    quilometragem: 15000,
++  });
++
++  // Cria OS inicial
++  const osCriada = await OrdemServicoRepository.create({
++    cliente_id: cliHist.id,
++    veiculo_id: veicHist.id,
++    cliente_nome: cliHist.nome,
++    cliente_telefone: cliHist.telefone,
++    veiculo_modelo: veicHist.veiculo,
++    veiculo_marca: veicHist.marca,
++    veiculo_ano: veicHist.ano,
++    veiculo_cor: veicHist.cor,
++    veiculo_placa: veicHist.placa,
++    quilometragem: 15000,
++    reclamacao_cliente: 'Ruído na suspensão dianteira',
++    data: '2026-11-10',
++    hora: '09:00',
++    status: 'ABERTA',
++    usuario_responsavel_nome: 'Mecânico Chefe',
++    desconto: 0,
++    acrescimo: 0,
++    itens: [
++      {
++        id: 'item_hist_1',
++        os_id: '',
++        tipo: 'SERVICO',
++        descricao: 'Diagnóstico computadorizado',
++        quantidade: 1,
++        valor_unitario: 180,
++        valor_total: 180,
++      },
++    ],
++    numero: 0,
++    numero_formatado: '',
++    subtotal: 180,
++    total: 180,
++    forma_pagamento: 'PIX',
++  });
++
++  // Executa pelo menos 2 transições de status
++  await OrdemServicoRepository.updateStatus(
++    osCriada.id,
++    'EM_ANDAMENTO',
++    'user_mecanico',
++    'Mecânico Chefe',
++    'Iniciada desmontagem e inspeção da barra estabilizadora'
++  );
++  await OrdemServicoRepository.updateStatus(
++    osCriada.id,
++    'CONCLUIDA',
++    'user_mecanico',
++    'Mecânico Chefe',
++    'Buchas substituídas e teste de rodagem aprovado'
++  );
++
++  // Confirma gravação dos históricos no banco
++  const historicosOriginais = await executeQuery<any>(
++    'SELECT * FROM historico_status WHERE os_id = $1 ORDER BY data_hora ASC, id ASC',
++    [osCriada.id]
++  );
++  assert(
++    historicosOriginais.length >= 3,
++    `Histórico original contém ${historicosOriginais.length} registros (criação + 2 atualizações de status)`
++  );
++
++  // Gera backup completo em JSON
++  const backupComHistorico = await generateJsonBackup();
++  assert(
++    backupComHistorico.data.historico_status && backupComHistorico.data.historico_status.length > 0,
++    'generateJsonBackup() incluiu array data.historico_status no payload exportado'
++  );
++
++  // Limpa o banco simulando perda de dados ou reinstalação
++  await wipeDatabaseClean();
++  const checkVazio = await executeQuery('SELECT count(*) as c FROM historico_status');
++  assert(parseInt((checkVazio[0] as any)?.c || '0', 10) === 0, 'Banco limpo com sucesso antes do restore');
++
++  // Executa restauração do JSON
++  await restoreFromJson(backupComHistorico);
++
++  // Consulta novamente os registros de histórico restaurados
++  const historicosRestaurados = await executeQuery<any>(
++    'SELECT * FROM historico_status WHERE os_id = $1 ORDER BY data_hora ASC, id ASC',
++    [osCriada.id]
++  );
++
++  assert(
++    historicosRestaurados.length === historicosOriginais.length,
++    `Quantidade de registros históricos restaurada com exatidão (${historicosRestaurados.length} registros)`
++  );
++
++  const camposIdenticos = historicosOriginais.every((orig, idx) => {
++    const rest = historicosRestaurados[idx];
++    return (
++      rest &&
++      rest.id === orig.id &&
++      rest.os_id === orig.os_id &&
++      rest.status_anterior === orig.status_anterior &&
++      rest.status_novo === orig.status_novo &&
++      rest.usuario_nome === orig.usuario_nome &&
++      rest.motivo === orig.motivo
++    );
++  });
++  assert(
++    camposIdenticos,
++    'Todos os campos de historico_status (id, os_id, status_anterior, status_novo, usuario, motivo) correspondem fielmente aos originais'
++  );
++
++  // 10.5 Teste B — Rollback Quando a Restauração do Histórico Falhar
++  console.log('    [Subcenário 10.5] Teste B — Rollback quando restauração de historico_status falha...');
++  // Grava registro de baseline no banco que deve sobreviver ao rollback
++  await executeCommand(`
++    INSERT INTO oficina (id, nome) VALUES ('oficina_baseline_hist_fail', 'Oficina Teste Rollback Histórico')
++    ON CONFLICT (id) DO UPDATE SET nome = 'Oficina Teste Rollback Histórico';
++  `);
++
++  const backupComFalhaNoHistorico = JSON.parse(JSON.stringify(backupComHistorico));
++  // Injeta uma falha controlada na inserção do histórico (status_novo nulo violando NOT NULL)
++  backupComFalhaNoHistorico.data.historico_status.push({
++    id: 'hist_corrompido_' + Date.now(),
++    os_id: osCriada.id,
++    status_anterior: 'ABERTA',
++    status_novo: null, // Violação de NOT NULL no PostgreSQL
++    usuario_nome: 'Tester',
++    motivo: 'Injeção de falha proposital no histórico',
++  });
++
++  let rollbackHistCaught = false;
++  try {
++    await restoreFromJson(backupComFalhaNoHistorico);
++  } catch {
++    rollbackHistCaught = true;
++  }
++  assert(rollbackHistCaught, 'Exceção disparada durante a tentativa de inserir histórico com dado corrompido');
++
++  const baselinePosRollback = await executeQuery<{ nome: string }>(
++    'SELECT nome FROM oficina WHERE id = $1',
++    ['oficina_baseline_hist_fail']
++  );
++  assert(
++    baselinePosRollback.length === 1 && baselinePosRollback[0]?.nome === 'Oficina Teste Rollback Histórico',
++    'ROLLBACK INTEGRAL: Dados pré-existentes preservados intactos após falha durante a restauração do histórico'
++  );
++
++  // 10.6 Teste C — Backup Legado Sem a Propriedade historico_status
++  console.log('    [Subcenário 10.6] Teste C — Compatibilidade com backup legado sem historico_status...');
++  const backupLegado = JSON.parse(JSON.stringify(backupComHistorico));
++  delete backupLegado.data.historico_status; // Simula backup gerado por versão antiga
++
++  let restoreLegadoOk = false;
++  try {
++    await restoreFromJson(backupLegado);
++    restoreLegadoOk = true;
++  } catch (e: any) {
++    console.error('Erro inesperado no restore legado:', e);
++  }
++  assert(restoreLegadoOk, 'restoreFromJson() executou com sucesso em backup legado sem historico_status');
++
++  const historicosAposLegado = await executeQuery<any>('SELECT * FROM historico_status');
++  assert(
++    historicosAposLegado.length === 0,
++    'Nenhum histórico artificial foi criado na ausência da propriedade em backup legado'
++  );
++
++  const oficinaAposLegado = await executeQuery<{ count: string }>('SELECT count(*) as count FROM oficina');
++  assert(
++    parseInt(oficinaAposLegado[0]?.count || '0', 10) > 0,
++    'Dados legítimos de oficina e demais entidades foram perfeitamente restaurados a partir do backup legado'
++  );
++
++  // 10.7 Teste D — Integridade dos Relacionamentos e Chaves Estrangeiras
++  console.log('    [Subcenário 10.7] Teste D — Integridade dos Relacionamentos e Integridade Referencial...');
++  // Restaura o backup completo com histórico
++  await restoreFromJson(backupComHistorico);
++
++  const ordens = await executeQuery<{ id: string; cliente_id: string; veiculo_id: string }>('SELECT id, cliente_id, veiculo_id FROM ordens_servico');
++  const historicosTotal = await executeQuery<{ id: string; os_id: string }>('SELECT id, os_id FROM historico_status');
++  const itensTotal = await executeQuery<{ id: string; os_id: string }>('SELECT id, os_id FROM itens_os');
++  const clientesTotal = await executeQuery<{ id: string }>('SELECT id FROM clientes');
++  const veiculosTotal = await executeQuery<{ id: string }>('SELECT id FROM veiculos');
++
++  const setOsIds = new Set(ordens.map((o) => o.id));
++  const setCliIds = new Set(clientesTotal.map((c) => c.id));
++  const setVeicIds = new Set(veiculosTotal.map((v) => v.id));
++
++  const historicosValidos = historicosTotal.every((h) => setOsIds.has(h.os_id));
++  const itensValidos = itensTotal.every((i) => setOsIds.has(i.os_id));
++  const osRelacionamentosValidos = ordens.every((o) => setCliIds.has(o.cliente_id) && setVeicIds.has(o.veiculo_id));
++
++  assert(
++    historicosValidos && historicosTotal.length > 0,
++    `Todos os ${historicosTotal.length} registros de historico_status apontam para OSs válidas existentes`
++  );
++  assert(
++    itensValidos && itensTotal.length > 0,
++    `Todos os ${itensTotal.length} itens de OS apontam para OSs válidas existentes`
++  );
++  assert(
++    osRelacionamentosValidos && ordens.length > 0,
++    `Todas as ${ordens.length} Ordens de Serviço possuem cliente e veículo válidos e vinculados`
++  );
+   console.log('\n--- Cenário 11: Auditoria Segura de postmaster.pid (Pendência E) ---');
+   const tempTestDir = path.join(process.cwd(), '.tmp_postmaster_test_' + Date.now());
+   fs.mkdirSync(tempTestDir, { recursive: true });
+-- 
+2.34.1
+

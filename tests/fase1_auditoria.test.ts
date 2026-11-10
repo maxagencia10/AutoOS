@@ -569,9 +569,228 @@ async function runAllTests() {
   assert(clienteRestaurado[0]?.nome === 'Cliente Restaurado', 'Backup válido restaurou cliente perfeitamente');
   assert(veicRestaurado[0]?.placa === 'RES1000', 'Backup válido restaurou veículo com sucesso');
 
-  // -------------------------------------------------------------------------
-  // 11. AUDITORIA E TRATAMENTO SEGURO DE POSTMASTER.PID (PENDÊNCIA E)
-  // -------------------------------------------------------------------------
+  // 10.4 Teste A — Restauração Integral do Histórico de Status de OS
+  console.log('    [Subcenário 10.4] Teste A — Restauração Integral do Histórico de Status...');
+  const ofHist = 'oficina_teste_hist_' + Date.now();
+  await executeCommand(`
+    INSERT INTO oficina (id, nome, modo_cabecalho, status_empresa)
+    VALUES ($1, 'Oficina Histórico Teste', 'composto', 'ATIVA')
+  `, [ofHist]);
+
+  const cliHist = await ClienteRepository.create({
+    nome: 'Cliente Para Teste de Histórico',
+    telefone: '(11) 91111-2222',
+  });
+
+  const veicHist = await VeiculoRepository.create({
+    cliente_id: cliHist.id,
+    veiculo: 'Polo TSI 1.0',
+    marca: 'Volkswagen',
+    ano: 2023,
+    cor: 'Cinza',
+    placa: 'HST' + Math.floor(1000 + Math.random() * 9000),
+    quilometragem: 15000,
+  });
+
+  // Cria OS inicial
+  const osCriada = await OrdemServicoRepository.create({
+    cliente_id: cliHist.id,
+    veiculo_id: veicHist.id,
+    cliente_nome: cliHist.nome,
+    cliente_telefone: cliHist.telefone,
+    veiculo_modelo: veicHist.veiculo,
+    veiculo_marca: veicHist.marca,
+    veiculo_ano: veicHist.ano,
+    veiculo_cor: veicHist.cor,
+    veiculo_placa: veicHist.placa,
+    quilometragem: 15000,
+    reclamacao_cliente: 'Ruído na suspensão dianteira',
+    data: '2026-11-10',
+    hora: '09:00',
+    status: 'ABERTA',
+    usuario_responsavel_nome: 'Mecânico Chefe',
+    desconto: 0,
+    acrescimo: 0,
+    itens: [
+      {
+        id: 'item_hist_1',
+        os_id: '',
+        tipo: 'SERVICO',
+        descricao: 'Diagnóstico computadorizado',
+        quantidade: 1,
+        valor_unitario: 180,
+        valor_total: 180,
+      },
+    ],
+    numero: 0,
+    numero_formatado: '',
+    subtotal: 180,
+    total: 180,
+    forma_pagamento: 'PIX',
+  });
+
+  // Executa pelo menos 2 transições de status
+  await OrdemServicoRepository.updateStatus(
+    osCriada.id,
+    'EM_ANDAMENTO',
+    'user_mecanico',
+    'Mecânico Chefe',
+    'Iniciada desmontagem e inspeção da barra estabilizadora'
+  );
+  await OrdemServicoRepository.updateStatus(
+    osCriada.id,
+    'CONCLUIDA',
+    'user_mecanico',
+    'Mecânico Chefe',
+    'Buchas substituídas e teste de rodagem aprovado'
+  );
+
+  // Confirma gravação dos históricos no banco
+  const historicosOriginais = await executeQuery<any>(
+    'SELECT * FROM historico_status WHERE os_id = $1 ORDER BY data_hora ASC, id ASC',
+    [osCriada.id]
+  );
+  assert(
+    historicosOriginais.length >= 3,
+    `Histórico original contém ${historicosOriginais.length} registros (criação + 2 atualizações de status)`
+  );
+
+  // Gera backup completo em JSON
+  const backupComHistorico = await generateJsonBackup();
+  assert(
+    backupComHistorico.data.historico_status && backupComHistorico.data.historico_status.length > 0,
+    'generateJsonBackup() incluiu array data.historico_status no payload exportado'
+  );
+
+  // Limpa o banco simulando perda de dados ou reinstalação
+  await wipeDatabaseClean();
+  const checkVazio = await executeQuery('SELECT count(*) as c FROM historico_status');
+  assert(parseInt((checkVazio[0] as any)?.c || '0', 10) === 0, 'Banco limpo com sucesso antes do restore');
+
+  // Executa restauração do JSON
+  await restoreFromJson(backupComHistorico);
+
+  // Consulta novamente os registros de histórico restaurados
+  const historicosRestaurados = await executeQuery<any>(
+    'SELECT * FROM historico_status WHERE os_id = $1 ORDER BY data_hora ASC, id ASC',
+    [osCriada.id]
+  );
+
+  assert(
+    historicosRestaurados.length === historicosOriginais.length,
+    `Quantidade de registros históricos restaurada com exatidão (${historicosRestaurados.length} registros)`
+  );
+
+  const camposIdenticos = historicosOriginais.every((orig, idx) => {
+    const rest = historicosRestaurados[idx];
+    return (
+      rest &&
+      rest.id === orig.id &&
+      rest.os_id === orig.os_id &&
+      rest.status_anterior === orig.status_anterior &&
+      rest.status_novo === orig.status_novo &&
+      rest.usuario_nome === orig.usuario_nome &&
+      rest.motivo === orig.motivo
+    );
+  });
+  assert(
+    camposIdenticos,
+    'Todos os campos de historico_status (id, os_id, status_anterior, status_novo, usuario, motivo) correspondem fielmente aos originais'
+  );
+
+  // 10.5 Teste B — Rollback Quando a Restauração do Histórico Falhar
+  console.log('    [Subcenário 10.5] Teste B — Rollback quando restauração de historico_status falha...');
+  // Grava registro de baseline no banco que deve sobreviver ao rollback
+  await executeCommand(`
+    INSERT INTO oficina (id, nome) VALUES ('oficina_baseline_hist_fail', 'Oficina Teste Rollback Histórico')
+    ON CONFLICT (id) DO UPDATE SET nome = 'Oficina Teste Rollback Histórico';
+  `);
+
+  const backupComFalhaNoHistorico = JSON.parse(JSON.stringify(backupComHistorico));
+  // Injeta uma falha controlada na inserção do histórico (status_novo nulo violando NOT NULL)
+  backupComFalhaNoHistorico.data.historico_status.push({
+    id: 'hist_corrompido_' + Date.now(),
+    os_id: osCriada.id,
+    status_anterior: 'ABERTA',
+    status_novo: null, // Violação de NOT NULL no PostgreSQL
+    usuario_nome: 'Tester',
+    motivo: 'Injeção de falha proposital no histórico',
+  });
+
+  let rollbackHistCaught = false;
+  try {
+    await restoreFromJson(backupComFalhaNoHistorico);
+  } catch {
+    rollbackHistCaught = true;
+  }
+  assert(rollbackHistCaught, 'Exceção disparada durante a tentativa de inserir histórico com dado corrompido');
+
+  const baselinePosRollback = await executeQuery<{ nome: string }>(
+    'SELECT nome FROM oficina WHERE id = $1',
+    ['oficina_baseline_hist_fail']
+  );
+  assert(
+    baselinePosRollback.length === 1 && baselinePosRollback[0]?.nome === 'Oficina Teste Rollback Histórico',
+    'ROLLBACK INTEGRAL: Dados pré-existentes preservados intactos após falha durante a restauração do histórico'
+  );
+
+  // 10.6 Teste C — Backup Legado Sem a Propriedade historico_status
+  console.log('    [Subcenário 10.6] Teste C — Compatibilidade com backup legado sem historico_status...');
+  const backupLegado = JSON.parse(JSON.stringify(backupComHistorico));
+  delete backupLegado.data.historico_status; // Simula backup gerado por versão antiga
+
+  let restoreLegadoOk = false;
+  try {
+    await restoreFromJson(backupLegado);
+    restoreLegadoOk = true;
+  } catch (e: any) {
+    console.error('Erro inesperado no restore legado:', e);
+  }
+  assert(restoreLegadoOk, 'restoreFromJson() executou com sucesso em backup legado sem historico_status');
+
+  const historicosAposLegado = await executeQuery<any>('SELECT * FROM historico_status');
+  assert(
+    historicosAposLegado.length === 0,
+    'Nenhum histórico artificial foi criado na ausência da propriedade em backup legado'
+  );
+
+  const oficinaAposLegado = await executeQuery<{ count: string }>('SELECT count(*) as count FROM oficina');
+  assert(
+    parseInt(oficinaAposLegado[0]?.count || '0', 10) > 0,
+    'Dados legítimos de oficina e demais entidades foram perfeitamente restaurados a partir do backup legado'
+  );
+
+  // 10.7 Teste D — Integridade dos Relacionamentos e Chaves Estrangeiras
+  console.log('    [Subcenário 10.7] Teste D — Integridade dos Relacionamentos e Integridade Referencial...');
+  // Restaura o backup completo com histórico
+  await restoreFromJson(backupComHistorico);
+
+  const ordens = await executeQuery<{ id: string; cliente_id: string; veiculo_id: string }>('SELECT id, cliente_id, veiculo_id FROM ordens_servico');
+  const historicosTotal = await executeQuery<{ id: string; os_id: string }>('SELECT id, os_id FROM historico_status');
+  const itensTotal = await executeQuery<{ id: string; os_id: string }>('SELECT id, os_id FROM itens_os');
+  const clientesTotal = await executeQuery<{ id: string }>('SELECT id FROM clientes');
+  const veiculosTotal = await executeQuery<{ id: string }>('SELECT id FROM veiculos');
+
+  const setOsIds = new Set(ordens.map((o) => o.id));
+  const setCliIds = new Set(clientesTotal.map((c) => c.id));
+  const setVeicIds = new Set(veiculosTotal.map((v) => v.id));
+
+  const historicosValidos = historicosTotal.every((h) => setOsIds.has(h.os_id));
+  const itensValidos = itensTotal.every((i) => setOsIds.has(i.os_id));
+  const osRelacionamentosValidos = ordens.every((o) => setCliIds.has(o.cliente_id) && setVeicIds.has(o.veiculo_id));
+
+  assert(
+    historicosValidos && historicosTotal.length > 0,
+    `Todos os ${historicosTotal.length} registros de historico_status apontam para OSs válidas existentes`
+  );
+  assert(
+    itensValidos && itensTotal.length > 0,
+    `Todos os ${itensTotal.length} itens de OS apontam para OSs válidas existentes`
+  );
+  assert(
+    osRelacionamentosValidos && ordens.length > 0,
+    `Todas as ${ordens.length} Ordens de Serviço possuem cliente e veículo válidos e vinculados`
+  );
   console.log('\n--- Cenário 11: Auditoria Segura de postmaster.pid (Pendência E) ---');
   const tempTestDir = path.join(process.cwd(), '.tmp_postmaster_test_' + Date.now());
   fs.mkdirSync(tempTestDir, { recursive: true });

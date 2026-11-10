@@ -641,6 +641,7 @@ ${SCHEMA_DDL}
 
 -- Limpeza prévia para restauração idempotente
 DELETE FROM itens_os;
+DELETE FROM historico_status;
 DELETE FROM ordens_servico;
 DELETE FROM veiculos;
 DELETE FROM clientes;
@@ -693,6 +694,12 @@ DELETE FROM oficina;
   const itens = (await db.query<any>(`SELECT * FROM itens_os`)).rows;
   for (const item of itens) {
     sqlDump += `INSERT INTO itens_os VALUES (${escapeSql(item.id)}, ${escapeSql(item.os_id)}, ${escapeSql(item.tipo)}, ${escapeSql(item.descricao)}, ${item.quantidade}, ${item.valor_unitario}, ${item.valor_total});\n`;
+  }
+
+  // Histórico de Status
+  const historico = (await db.query<any>(`SELECT * FROM historico_status`)).rows;
+  for (const h of historico) {
+    sqlDump += `INSERT INTO historico_status (id, os_id, status_anterior, status_novo, usuario_id, usuario_nome, motivo, data_hora) VALUES (${escapeSql(h.id)}, ${escapeSql(h.os_id)}, ${escapeSql(h.status_anterior)}, ${escapeSql(h.status_novo)}, ${escapeSql(h.usuario_id)}, ${escapeSql(h.usuario_nome)}, ${escapeSql(h.motivo)}, '${h.data_hora || new Date().toISOString()}');\n`;
   }
 
   sqlDump += `\nCOMMIT;\n-- FIM DO DUMP POSTGRESQL\n`;
@@ -758,27 +765,74 @@ export async function restoreFromJson(backupData: any): Promise<void> {
       DELETE FROM oficina;
     `);
 
-    // Restaura oficina
+    const toIso = (v: any): string => {
+      if (!v) return new Date().toISOString();
+      if (v instanceof Date) return v.toISOString();
+      return String(v);
+    };
+
+    // Restaura oficina com colunas explicitamente declaradas
     if (d.oficina && d.oficina.length > 0) {
       for (const o of d.oficina) {
         await tx.command(
-          `INSERT INTO oficina VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+          `INSERT INTO oficina (
+            id, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
+            cep, logradouro, numero, complemento, bairro, cidade, estado, logo,
+            banner_cabecalho, cabecalho_fundo, cabecalho_logo, cabecalho_escritas,
+            modo_cabecalho, texto_institucional, texto_padrao_garantia, texto_padrao_condicoes,
+            status_empresa, plano, limite_os_mensal, data_expiracao, responsavel_nome, responsavel_contato,
+            created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+            $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+            $31, $32
+          )`,
           [
-            o.id, o.nome, o.razao_social, o.nome_fantasia, o.cnpj, o.telefone, o.whatsapp, o.email,
-            o.cep, o.logradouro, o.numero, o.complemento, o.bairro, o.cidade, o.estado, o.logo,
-            o.texto_institucional, o.texto_padrao_garantia, o.texto_padrao_condicoes,
-            o.created_at || new Date().toISOString(), o.updated_at || new Date().toISOString()
+            o.id,
+            o.nome || 'Oficina',
+            o.razao_social || o.nome || '',
+            o.nome_fantasia || o.nome || '',
+            o.cnpj || '',
+            o.telefone || '',
+            o.whatsapp || '',
+            o.email || '',
+            o.cep || '',
+            o.logradouro || '',
+            o.numero || '',
+            o.complemento || '',
+            o.bairro || '',
+            o.cidade || '',
+            o.estado || '',
+            o.logo || '',
+            o.banner_cabecalho || '',
+            o.cabecalho_fundo || '',
+            o.cabecalho_logo || '',
+            o.cabecalho_escritas || '',
+            o.modo_cabecalho || 'composto',
+            o.texto_institucional || '',
+            o.texto_padrao_garantia || '',
+            o.texto_padrao_condicoes || '',
+            o.status_empresa || 'ATIVA',
+            o.plano || 'PRO',
+            Number(o.limite_os_mensal) || 500,
+            o.data_expiracao || '',
+            o.responsavel_nome || '',
+            o.responsavel_contato || '',
+            toIso(o.created_at),
+            toIso(o.updated_at),
           ]
         );
       }
     }
 
-    // Restaura usuários
+    // Restaura usuários com colunas explicitamente declaradas
     if (d.usuarios) {
       for (const u of d.usuarios) {
         await tx.command(
-          `INSERT INTO usuarios (id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro, cidade, estado, perfil, ativo, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+          `INSERT INTO usuarios (
+            id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro,
+            cidade, estado, perfil, ativo, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
           [
             u.id,
             u.oficina_id || 'oficina_matriz',
@@ -794,66 +848,165 @@ export async function restoreFromJson(backupData: any): Promise<void> {
             u.estado || '',
             u.perfil,
             u.ativo ?? true,
-            u.created_at || new Date().toISOString(),
-            u.updated_at || new Date().toISOString(),
+            toIso(u.created_at),
+            toIso(u.updated_at),
           ]
         );
       }
     }
 
-    // Restaura clientes
+    // Restaura clientes com colunas explicitamente declaradas
     if (d.clientes) {
       for (const c of d.clientes) {
         await tx.command(
-          `INSERT INTO clientes VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+          `INSERT INTO clientes (
+            id, oficina_id, nome, cpf_cnpj, telefone, whatsapp, email, cep, logradouro,
+            numero, complemento, bairro, cidade, estado, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
           [
-            c.id, c.oficina_id, c.nome, c.cpf_cnpj, c.telefone, c.whatsapp, c.email,
-            c.cep, c.logradouro, c.numero, c.complemento, c.bairro, c.cidade, c.estado,
-            c.created_at || new Date().toISOString(), c.updated_at || new Date().toISOString()
+            c.id,
+            c.oficina_id || 'oficina_matriz',
+            c.nome,
+            c.cpf_cnpj || '',
+            c.telefone || '',
+            c.whatsapp || '',
+            c.email || '',
+            c.cep || '',
+            c.logradouro || '',
+            c.numero || '',
+            c.complemento || '',
+            c.bairro || '',
+            c.cidade || '',
+            c.estado || '',
+            toIso(c.created_at),
+            toIso(c.updated_at),
           ]
         );
       }
     }
 
-    // Restaura veículos
+    // Restaura veículos com colunas explicitamente declaradas
     if (d.veiculos) {
       for (const v of d.veiculos) {
         await tx.command(
-          `INSERT INTO veiculos VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [v.id, v.cliente_id, v.veiculo, v.marca, v.ano, v.cor, v.placa, v.quilometragem, v.created_at || new Date().toISOString(), v.updated_at || new Date().toISOString()]
-        );
-      }
-    }
-
-    // Restaura ordens_servico
-    if (d.ordens_servico) {
-      for (const o of d.ordens_servico) {
-        await tx.command(
-          `INSERT INTO ordens_servico VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-            $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
-            $33, $34, $35, $36, $37, $38
-          )`,
+          `INSERT INTO veiculos (
+            id, cliente_id, veiculo, marca, ano, cor, placa, quilometragem, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
-            o.id, o.numero, o.numero_formatado, o.data, o.hora, o.cliente_id, o.veiculo_id,
-            o.cliente_nome, o.cliente_cpf_cnpj, o.cliente_telefone, o.cliente_whatsapp, o.cliente_email,
-            o.cliente_endereco, o.cliente_cep, o.veiculo_modelo, o.veiculo_marca, o.veiculo_ano,
-            o.veiculo_cor, o.veiculo_placa, o.quilometragem, o.quilometragem_anterior || 0,
-            o.reclamacao_cliente, o.diagnostico_avaliacao, o.subtotal, o.desconto, o.acrescimo,
-            o.total, o.forma_pagamento, o.observacoes, o.garantia, o.status,
-            o.motivo_cancelamento, o.cancelado_por_usuario, o.data_cancelamento,
-            o.usuario_responsavel_id, o.usuario_responsavel_nome, o.created_at || new Date().toISOString(), o.updated_at || new Date().toISOString()
+            v.id,
+            v.cliente_id,
+            v.veiculo,
+            v.marca,
+            Number(v.ano),
+            v.cor,
+            v.placa,
+            Number(v.quilometragem) || 0,
+            toIso(v.created_at),
+            toIso(v.updated_at),
           ]
         );
       }
     }
 
-    // Restaura itens_os
+    // Restaura ordens_servico com colunas explicitamente declaradas
+    if (d.ordens_servico) {
+      for (const o of d.ordens_servico) {
+        await tx.command(
+          `INSERT INTO ordens_servico (
+            id, oficina_id, numero, numero_formatado, data, hora, cliente_id, veiculo_id,
+            cliente_nome, cliente_cpf_cnpj, cliente_telefone, cliente_whatsapp, cliente_email,
+            cliente_endereco, cliente_cep, veiculo_modelo, veiculo_marca, veiculo_ano,
+            veiculo_cor, veiculo_placa, quilometragem, quilometragem_anterior,
+            reclamacao_cliente, diagnostico_avaliacao, subtotal, desconto, acrescimo,
+            total, forma_pagamento, observacoes, garantia, status,
+            motivo_cancelamento, cancelado_por_usuario, data_cancelamento,
+            usuario_responsavel_id, usuario_responsavel_nome, created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+            $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39
+          )`,
+          [
+            o.id,
+            o.oficina_id || 'oficina_matriz',
+            Number(o.numero),
+            o.numero_formatado || `OS Nº ${String(o.numero).padStart(6, '0')}`,
+            o.data || '',
+            o.hora || '',
+            o.cliente_id,
+            o.veiculo_id,
+            o.cliente_nome,
+            o.cliente_cpf_cnpj || '',
+            o.cliente_telefone || '',
+            o.cliente_whatsapp || '',
+            o.cliente_email || '',
+            o.cliente_endereco || '',
+            o.cliente_cep || '',
+            o.veiculo_modelo,
+            o.veiculo_marca,
+            Number(o.veiculo_ano),
+            o.veiculo_cor,
+            o.veiculo_placa,
+            Number(o.quilometragem) || 0,
+            Number(o.quilometragem_anterior) || 0,
+            o.reclamacao_cliente,
+            o.diagnostico_avaliacao || '',
+            Number(o.subtotal) || 0,
+            Number(o.desconto) || 0,
+            Number(o.acrescimo) || 0,
+            Number(o.total) || 0,
+            o.forma_pagamento || 'Pix',
+            o.observacoes || '',
+            o.garantia || '',
+            o.status || 'ABERTA',
+            o.motivo_cancelamento || null,
+            o.cancelado_por_usuario || null,
+            o.data_cancelamento || null,
+            o.usuario_responsavel_id || null,
+            o.usuario_responsavel_nome || '',
+            toIso(o.created_at),
+            toIso(o.updated_at),
+          ]
+        );
+      }
+    }
+
+    // Restaura itens_os com colunas explicitamente declaradas
     if (d.itens_os) {
       for (const it of d.itens_os) {
         await tx.command(
-          `INSERT INTO itens_os VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [it.id, it.os_id, it.tipo, it.descricao, it.quantidade, it.valor_unitario, it.valor_total]
+          `INSERT INTO itens_os (
+            id, os_id, tipo, descricao, quantidade, valor_unitario, valor_total
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            it.id,
+            it.os_id,
+            it.tipo,
+            it.descricao,
+            Number(it.quantidade) || 1,
+            Number(it.valor_unitario) || 0,
+            Number(it.valor_total) || 0,
+          ]
+        );
+      }
+    }
+
+    // Restaura historico_status com integridade referencial e colunas explicitamente declaradas
+    if (d.historico_status && Array.isArray(d.historico_status)) {
+      for (const h of d.historico_status) {
+        await tx.command(
+          `INSERT INTO historico_status (
+            id, os_id, status_anterior, status_novo, usuario_id, usuario_nome, motivo, data_hora
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            h.id,
+            h.os_id,
+            h.status_anterior,
+            h.status_novo,
+            h.usuario_id || null,
+            h.usuario_nome,
+            h.motivo || null,
+            toIso(h.data_hora),
+          ]
         );
       }
     }
