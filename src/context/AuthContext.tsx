@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Usuario, OficinaConfig } from '../types';
 import { UsuarioRepository, SistemaRepository, OficinaRepository } from '../services/dbRepository';
-import { extrairParametrosConvite, gerarPathLoja, gerarTokenConvite } from '../utils/conviteSaaS';
+import { extrairParametrosConvite, gerarPathLoja, gerarTokenConvite, isRotaPortalMaster, gerarPathAdminGeral } from '../utils/conviteSaaS';
 import { autenticarUsuarioComVinculo, resolverLojaAlvoPorUrl } from '../services/authAccessService';
 
 interface AuthContextType {
@@ -13,6 +13,8 @@ interface AuthContextType {
   isAdmin: boolean;
   isMecanico: boolean;
   isPortalLoja: boolean;
+  isPortalMaster: boolean;
+  irParaLoginGeral: () => void;
   erroPortalLoja: string | null;
   carregando: boolean;
   isInstalado: boolean;
@@ -50,6 +52,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [oficinasDisponiveis, setOficinasDisponiveis] = useState<OficinaConfig[]>([]);
   const [oficinaAtiva, setOficinaAtiva] = useState<OficinaConfig | null>(null);
   const [isPortalLoja, setIsPortalLoja] = useState<boolean>(false);
+  const [isPortalMaster, setIsPortalMaster] = useState<boolean>(() => isRotaPortalMaster());
   const [erroPortalLoja, setErroPortalLoja] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [isInstalado, setIsInstalado] = useState<boolean>(true);
@@ -129,6 +132,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const recarregarUsuarios = async () => {
     try {
       setErroPortalLoja(null);
+      const portalMasterDetectado = isRotaPortalMaster();
+      setIsPortalMaster(portalMasterDetectado);
       const { tokenData, urlOficina, urlSlug, isPortalLoja: portalLojaDetectado } = extrairParametrosConvite();
       setIsPortalLoja(portalLojaDetectado);
 
@@ -264,6 +269,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userSalvo = sessaoId ? list.find((u) => u.id === sessaoId && u.ativo) : null;
 
       if (userSalvo) {
+        // Se acessou a rota específica da Administração Geral (/admin), bloqueia reaproveitamento de sessão de lojista comum
+        if (portalMasterDetectado && userSalvo.perfil !== 'SUPERADMIN') {
+          setUsuarioAtual(null);
+          localStorage.removeItem('autoos_usuario_sessao');
+          return;
+        }
+
         // Se estamos em um link específico de loja (/loja/:slug ou ?oficina=)
         if (portalLojaDetectado) {
           const pertenceALojaAlvo =
@@ -391,8 +403,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setUsuarioAtual(alvo);
       localStorage.setItem('autoos_usuario_sessao', alvo.id);
+      setIsPortalMaster(true);
+      setIsPortalLoja(false);
       if (typeof window !== 'undefined') {
-        window.history.replaceState({}, '', '/');
+        window.history.replaceState({}, '', gerarPathAdminGeral());
       }
       await recarregarUsuarios();
       return { sucesso: true };
@@ -430,12 +444,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setOficinaAtiva(ofRecente);
         localStorage.setItem('autoos_oficina_ativa_id', ofRecente.id);
         setIsPortalLoja(true);
+        setIsPortalMaster(false);
         if (typeof window !== 'undefined') {
           window.history.replaceState({}, '', gerarPathLoja(ofRecente));
         }
       } else if (typeof window !== 'undefined') {
         setIsPortalLoja(false);
-        window.history.replaceState({}, '', '/');
+        const manterAdmin = user.perfil === 'SUPERADMIN' && isRotaPortalMaster();
+        setIsPortalMaster(manterAdmin);
+        window.history.replaceState({}, '', manterAdmin ? gerarPathAdminGeral() : '/');
       }
 
       return {
@@ -451,16 +468,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     const eraLojista = usuarioAtual?.perfil !== 'SUPERADMIN';
     const oficinaAtual = oficinaAtiva;
+    const estavaPortalMaster = isPortalMaster || isRotaPortalMaster();
     setUsuarioAtual(null);
     localStorage.removeItem('autoos_usuario_sessao');
     if (typeof window !== 'undefined') {
       if (eraLojista && oficinaAtual) {
         setIsPortalLoja(true);
+        setIsPortalMaster(false);
         window.history.replaceState({}, '', gerarPathLoja(oficinaAtual));
+      } else if (!eraLojista && estavaPortalMaster) {
+        setIsPortalLoja(false);
+        setIsPortalMaster(true);
+        window.history.replaceState({}, '', gerarPathAdminGeral());
       } else {
         setIsPortalLoja(false);
+        setIsPortalMaster(false);
         window.history.replaceState({}, '', '/');
       }
+    }
+  };
+
+  const irParaLoginGeral = () => {
+    setIsPortalMaster(false);
+    setIsPortalLoja(false);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, '', '/');
     }
   };
 
@@ -563,6 +595,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAdmin,
         isMecanico,
         isPortalLoja,
+        isPortalMaster,
+        irParaLoginGeral,
         erroPortalLoja,
         carregando,
         isInstalado,

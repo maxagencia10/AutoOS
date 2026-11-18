@@ -25,11 +25,20 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
+  Key,
+  Eye,
+  EyeOff,
+  Mail,
+  UserCheck,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { SaasEmpresasView } from './SaasEmpresasView';
 import { UsuariosView } from './UsuariosView';
-import { gerarLinkExclusivoLoja } from '../utils/conviteSaaS';
+import { gerarLinkExclusivoLoja, gerarLinkAdminGeral } from '../utils/conviteSaaS';
+import { UsuarioRepository } from '../services/dbRepository';
+import { formatPhone } from '../utils/formatters';
 
 interface AdminGeralViewProps {
   onVoltarParaOficina?: () => void;
@@ -46,20 +55,103 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
     sairAdminGeral,
     selecionarOficina,
     testarLoginLojista,
+    recarregarUsuarios,
     urlBasePublica,
     setUrlBasePublica,
   } = useAuth();
 
-  const [abaInterna, setAbaInterna] = useState<'empresas' | 'usuarios' | 'guia_acessos' | 'status'>(
+  const [abaInterna, setAbaInterna] = useState<'empresas' | 'usuarios' | 'guia_acessos' | 'conta_master'>(
     'empresas'
   );
   const [oficinaSelecionadaParaConvite, setOficinaSelecionadaParaConvite] = useState<string>(
     oficinasDisponiveis[0]?.id || ''
   );
   const [copiadoConvite, setCopiadoConvite] = useState(false);
+  const [copiadoLinkMaster, setCopiadoLinkMaster] = useState<'producao' | 'atual' | null>(null);
   const [urlInput, setUrlInput] = useState(urlBasePublica);
   const [salvouUrl, setSalvouUrl] = useState(false);
   const [expandirAjudaVercel, setExpandirAjudaVercel] = useState(true);
+
+  const contaMasterAtual =
+    (usuarioAtual?.perfil === 'SUPERADMIN' ? usuarioAtual : null) ||
+    usuariosDisponiveis.find((u) => u.perfil === 'SUPERADMIN') ||
+    null;
+
+  const [masterNome, setMasterNome] = useState(contaMasterAtual?.nome || 'Administrador Geral (Master)');
+  const [masterEmail, setMasterEmail] = useState(contaMasterAtual?.email || 'maxagencia@gmail.com');
+  const [masterTelefone, setMasterTelefone] = useState(contaMasterAtual?.telefone || '');
+  const [masterNovaSenha, setMasterNovaSenha] = useState('');
+  const [masterConfirmarSenha, setMasterConfirmarSenha] = useState('');
+  const [mostrarNovaSenha, setMostrarNovaSenha] = useState(false);
+  const [mostrarConfirmarSenha, setMostrarConfirmarSenha] = useState(false);
+  const [salvandoMaster, setSalvandoMaster] = useState(false);
+  const [erroMaster, setErroMaster] = useState('');
+  const [sucessoMaster, setSucessoMaster] = useState('');
+
+  React.useEffect(() => {
+    if (contaMasterAtual) {
+      setMasterNome(contaMasterAtual.nome || 'Administrador Geral (Master)');
+      setMasterEmail(contaMasterAtual.email || '');
+      setMasterTelefone(contaMasterAtual.telefone || '');
+    }
+  }, [contaMasterAtual?.id, contaMasterAtual?.nome, contaMasterAtual?.email, contaMasterAtual?.telefone]);
+
+  const handleSalvarContaMaster = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErroMaster('');
+    setSucessoMaster('');
+
+    if (!contaMasterAtual) {
+      setErroMaster('Conta Master (SUPERADMIN) não encontrada no banco de dados.');
+      return;
+    }
+
+    const nomeLimpo = masterNome.trim();
+    const emailLimpo = masterEmail.trim().toLowerCase();
+    const senhaNovaLimpa = masterNovaSenha.trim();
+    const confirmarLimpa = masterConfirmarSenha.trim();
+
+    if (!nomeLimpo) {
+      setErroMaster('Informe o nome do Administrador Geral.');
+      return;
+    }
+    if (!emailLimpo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLimpo)) {
+      setErroMaster('Informe um e-mail válido para o usuário master.');
+      return;
+    }
+    if (senhaNovaLimpa) {
+      if (senhaNovaLimpa.length < 4) {
+        setErroMaster('A nova senha deve ter pelo menos 4 caracteres.');
+        return;
+      }
+      if (senhaNovaLimpa !== confirmarLimpa) {
+        setErroMaster('A confirmação da nova senha não confere.');
+        return;
+      }
+    }
+
+    setSalvandoMaster(true);
+    try {
+      await UsuarioRepository.update(contaMasterAtual.id, {
+        nome: nomeLimpo,
+        email: emailLimpo,
+        telefone: masterTelefone.trim(),
+        ...(senhaNovaLimpa ? { senha: senhaNovaLimpa } : {}),
+      });
+      await recarregarUsuarios();
+      setMasterNovaSenha('');
+      setMasterConfirmarSenha('');
+      setSucessoMaster(
+        senhaNovaLimpa
+          ? `Credenciais do Usuário Master atualizadas! Novo login: ${emailLimpo} (senha alterada).`
+          : `Dados do Usuário Master atualizados para ${emailLimpo}.`
+      );
+    } catch (err: any) {
+      setErroMaster(err.message || 'Erro ao atualizar credenciais do Usuário Master.');
+    } finally {
+      setSalvandoMaster(false);
+    }
+  };
 
   const oficinaAlvo =
     oficinasDisponiveis.find((o) => o.id === oficinaSelecionadaParaConvite) ||
@@ -74,6 +166,9 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
     null;
 
   const originUrl = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app');
+  const currentBrowserOrigin = typeof window !== 'undefined' ? window.location.origin : originUrl;
+  const linkAdminGeralOficial = gerarLinkAdminGeral(originUrl);
+  const linkAdminGeralAtual = gerarLinkAdminGeral(currentBrowserOrigin);
   const linkAcessoDireto = oficinaAlvo
     ? gerarLinkExclusivoLoja({
         baseUrl: originUrl,
@@ -81,6 +176,12 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
         usuario: adminDestaOficina,
       })
     : originUrl;
+
+  const handleCopiarLinkMaster = (tipo: 'producao' | 'atual', valor: string) => {
+    navigator.clipboard.writeText(valor);
+    setCopiadoLinkMaster(tipo);
+    setTimeout(() => setCopiadoLinkMaster(null), 2500);
+  };
 
   const handleSalvarUrlBase = (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,6 +254,16 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
 
           {/* Botões de Ação do Header */}
           <div className="flex items-center gap-2 flex-wrap shrink-0">
+            <button
+              type="button"
+              onClick={() => setAbaInterna('conta_master')}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-white text-xs font-bold border border-amber-500/40 transition cursor-pointer"
+              title="Alterar e-mail, senha e dados do usuário Master"
+            >
+              <Key className="w-3.5 h-3.5" />
+              <span>Alterar Usuário Master</span>
+            </button>
+
             {onVoltarParaOficina && (
               <button
                 onClick={onVoltarParaOficina}
@@ -259,6 +370,18 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
         >
           <Share2 className="w-4 h-4" />
           <span>Central de Novos Acessos & WhatsApp</span>
+        </button>
+
+        <button
+          onClick={() => setAbaInterna('conta_master')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer whitespace-nowrap ${
+            abaInterna === 'conta_master'
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent'
+          }`}
+        >
+          <Key className="w-4 h-4" />
+          <span>Conta Master (Acesso Geral)</span>
         </button>
       </div>
 
@@ -506,6 +629,240 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
                 Você como dono da plataforma pode clicar em <strong>👑 Admin Geral</strong> a qualquer momento em qualquer oficina para ver todas as lojas e redefinir acessos.
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Conteúdo da Aba 4: Configurações, Link Exclusivo e Alteração do Usuário Master */}
+      {abaInterna === 'conta_master' && (
+        <div className="space-y-5 max-w-2xl">
+          {/* Card do Link Específico da Administração Geral (/admin) */}
+          <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-amber-950/20 border border-amber-500/30 rounded-2xl p-5 shadow-xl space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                <Crown className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-white">
+                  Link Específico de Acesso à Administração Geral
+                </h2>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Rota exclusiva (<code className="text-amber-300 font-mono">/admin</code>) que aceita somente usuários{' '}
+                  <strong className="text-amber-300">SUPERADMIN</strong>. Contas comuns de lojas não conseguem entrar por este link.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 pt-1">
+              <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block">
+                    Link Oficial de Produção
+                  </span>
+                  <code className="text-xs font-mono text-zinc-100 break-all">{linkAdminGeralOficial}</code>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopiarLinkMaster('producao', linkAdminGeralOficial)}
+                  className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-white text-xs font-bold border border-amber-500/40 transition cursor-pointer shrink-0"
+                >
+                  {copiadoLinkMaster === 'producao' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiadoLinkMaster === 'producao' ? 'Copiado!' : 'Copiar Link'}</span>
+                </button>
+              </div>
+
+              {linkAdminGeralAtual !== linkAdminGeralOficial && (
+                <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400 block">
+                      Link do Ambiente Atual
+                    </span>
+                    <code className="text-xs font-mono text-zinc-100 break-all">{linkAdminGeralAtual}</code>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopiarLinkMaster('atual', linkAdminGeralAtual)}
+                    className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold border border-zinc-700 transition cursor-pointer shrink-0"
+                  >
+                    {copiadoLinkMaster === 'atual' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiadoLinkMaster === 'atual' ? 'Copiado!' : 'Copiar Link'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
+            <div className="flex items-start gap-3.5 border-b border-zinc-800 pb-4">
+              <div className="w-11 h-11 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                <Key className="w-5 h-5" />
+              </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold text-white">
+                  Alterar Usuário Master da Administração Geral
+                </h2>
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  SUPERADMIN
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 mt-1">
+                Altere o e-mail de login, nome, telefone ou redefina a senha de acesso ao Portal Master do sistema.
+              </p>
+            </div>
+          </div>
+
+          {erroMaster && (
+            <div className="p-3 bg-red-950/70 border border-red-800 rounded-xl flex items-start gap-2.5 text-xs text-red-200">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              <span>{erroMaster}</span>
+            </div>
+          )}
+
+          {sucessoMaster && (
+            <div className="p-3 bg-emerald-950/70 border border-emerald-800 rounded-xl flex items-start gap-2.5 text-xs text-emerald-200">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <span>{sucessoMaster}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSalvarContaMaster} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  Nome do Administrador Geral <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <UserCheck className="w-4 h-4 text-zinc-500 absolute left-3 top-3 pointer-events-none" />
+                  <input
+                    type="text"
+                    required
+                    value={masterNome}
+                    onChange={(e) => setMasterNome(e.target.value)}
+                    placeholder="Administrador Geral (Master)"
+                    className="w-full pl-9 pr-3 py-2.5 bg-zinc-950 border border-zinc-700 rounded-xl text-white text-xs sm:text-sm focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  E-mail de Login Master <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-zinc-500 absolute left-3 top-3 pointer-events-none" />
+                  <input
+                    type="email"
+                    required
+                    value={masterEmail}
+                    onChange={(e) => setMasterEmail(e.target.value)}
+                    placeholder="maxagencia@gmail.com"
+                    className="w-full pl-9 pr-3 py-2.5 bg-zinc-950 border border-zinc-700 rounded-xl text-white text-xs sm:text-sm focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  Telefone / WhatsApp
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-zinc-500 absolute left-3 top-3 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={masterTelefone}
+                    onChange={(e) => setMasterTelefone(formatPhone(e.target.value))}
+                    placeholder="(11) 99999-9999"
+                    className="w-full pl-9 pr-3 py-2.5 bg-zinc-950 border border-zinc-700 rounded-xl text-white text-xs sm:text-sm font-mono focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-zinc-200 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  Alterar Senha de Acesso Master
+                </span>
+                <span className="text-[11px] text-zinc-400">
+                  Deixe em branco para manter a senha atual
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                    Nova Senha
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={mostrarNovaSenha ? 'text' : 'password'}
+                      value={masterNovaSenha}
+                      onChange={(e) => setMasterNovaSenha(e.target.value)}
+                      placeholder="Digite a nova senha (mín. 4 dígitos)"
+                      className="w-full pl-3 pr-10 py-2.5 bg-zinc-950 border border-zinc-700 rounded-xl text-white text-xs sm:text-sm focus:outline-none focus:border-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setMostrarNovaSenha(!mostrarNovaSenha)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                      title={mostrarNovaSenha ? 'Ocultar senha' : 'Exibir senha'}
+                    >
+                      {mostrarNovaSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                    Confirmar Nova Senha
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={mostrarConfirmarSenha ? 'text' : 'password'}
+                      value={masterConfirmarSenha}
+                      onChange={(e) => setMasterConfirmarSenha(e.target.value)}
+                      placeholder="Repita a nova senha"
+                      className="w-full pl-3 pr-10 py-2.5 bg-zinc-950 border border-zinc-700 rounded-xl text-white text-xs sm:text-sm focus:outline-none focus:border-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setMostrarConfirmarSenha(!mostrarConfirmarSenha)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                      title={mostrarConfirmarSenha ? 'Ocultar senha' : 'Exibir senha'}
+                    >
+                      {mostrarConfirmarSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-[11px] text-zinc-400">
+                ID da Conta: <code className="text-zinc-300">{contaMasterAtual?.id || 'admin_master'}</code>
+              </div>
+
+              <button
+                type="submit"
+                disabled={salvandoMaster}
+                className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-zinc-950 font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-amber-950/40 transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {salvandoMaster ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Salvando Alterações...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Salvar Credenciais Master</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
           </div>
         </div>
       )}

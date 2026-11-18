@@ -1,6 +1,6 @@
 import { OficinaConfig, Usuario } from '../types';
 import { OficinaRepository, UsuarioRepository } from './dbRepository';
-import { extrairParametrosConvite, DadosConviteLoja } from '../utils/conviteSaaS';
+import { extrairParametrosConvite, DadosConviteLoja, isRotaPortalMaster } from '../utils/conviteSaaS';
 
 export interface ContextoUrlAcesso {
   search?: string;
@@ -218,6 +218,16 @@ export async function autenticarUsuarioComVinculo(
     return {
       sucesso: false,
       mensagem: 'Usuário não encontrado com o e-mail ou nome informado.',
+    };
+  }
+
+  // Se acessou pelo link específico da Administração Geral (/admin), apenas SUPERADMIN pode entrar
+  const portalMaster = isRotaPortalMaster(contextoUrl.pathname, contextoUrl.search);
+  if (portalMaster && user.perfil !== 'SUPERADMIN') {
+    return {
+      sucesso: false,
+      mensagem:
+        'Acesso negado: este link (/admin) é exclusivo da Administração Geral (SUPERADMIN). Lojistas devem acessar pelo link da sua loja.',
     };
   }
 

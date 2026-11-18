@@ -20,12 +20,14 @@ import { VisualizacaoOSModal } from './components/VisualizacaoOSModal';
 import { InstalacaoWizard } from './components/InstalacaoWizard';
 import { GuiaPassoAPasso } from './components/GuiaPassoAPasso';
 import { Cliente, Veiculo, OrdemServico } from './types';
+import { isRotaPortalMaster } from './utils/conviteSaaS';
 
 function MainApp() {
   const {
     isInstalado,
     isAutenticado,
     isSuperAdmin,
+    isPortalMaster,
     carregando,
     recarregarUsuarios,
     modalCadastroAdminLojaAberto,
@@ -33,6 +35,9 @@ function MainApp() {
   } = useAuth();
   const [currentTab, setCurrentTab] = useState<string>(() => {
     if (typeof window !== 'undefined') {
+      if (isRotaPortalMaster()) {
+        return 'admin_geral';
+      }
       const savedTab = sessionStorage.getItem('autoos_current_tab');
       if (savedTab && savedTab !== 'admin_geral' && savedTab !== 'empresas' && savedTab !== 'atualizacoes') {
         return savedTab;
@@ -40,6 +45,13 @@ function MainApp() {
     }
     return 'dashboard';
   });
+
+  // Ao acessar via rota exclusiva do Portal Master (/admin) já autenticado como SUPERADMIN, abre direto o painel Master
+  React.useEffect(() => {
+    if (isAutenticado && isSuperAdmin && isPortalMaster && currentTab !== 'admin_geral') {
+      setCurrentTab('admin_geral');
+    }
+  }, [isAutenticado, isSuperAdmin, isPortalMaster]);
 
   // Guardião de Rota: se o usuário não for Super Admin, bloqueia acesso a telas globais do Micro-SaaS
   React.useEffect(() => {

@@ -24,10 +24,13 @@ interface LoginViewProps {
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAdminGeral }) => {
   const {
     loginUsuario,
+    loginAdminGeral,
     oficinasDisponiveis,
     oficinaAtiva,
     selecionarOficina,
     isPortalLoja: isPortalLojaContext,
+    isPortalMaster,
+    irParaLoginGeral,
     erroPortalLoja,
   } = useAuth();
 
@@ -114,6 +117,31 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
     setSucessoMsg('');
 
     try {
+      if (isPortalMaster) {
+        const resMaster = await loginAdminGeral(idUsar, senha);
+        if (resMaster.sucesso) {
+          setSucessoMsg('Acesso Master autorizado! Abrindo Administração Geral...');
+          setTimeout(() => {
+            if (onLoginSucesso) {
+              onLoginSucesso(
+                {
+                  id: 'admin_master',
+                  oficina_id: 'oficina_matriz',
+                  nome: 'Administrador Geral',
+                  email: idUsar,
+                  perfil: 'SUPERADMIN',
+                  ativo: true,
+                },
+                false
+              );
+            }
+          }, 350);
+        } else {
+          setErro(resMaster.mensagem || 'Credenciais inválidas para o Administrador Geral.');
+        }
+        return;
+      }
+
       const res = await loginUsuario(idUsar, senha);
       if (res.sucesso && res.usuario) {
         const user = res.usuario;
@@ -131,7 +159,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
     }
   };
 
-  const portalRestritoLoja = isPortalLojaContext || isAcessoLojistaConvite;
+  const portalRestritoLoja = !isPortalMaster && (isPortalLojaContext || isAcessoLojistaConvite);
 
   // Identifica a oficina exibida exclusivamente quando em portal de loja ou ativa
   const oficinaExibida = portalRestritoLoja
@@ -146,28 +174,74 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
       <div className="w-full max-w-md space-y-6">
         {/* Marca & Logo AutoOS */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-red-600 to-red-800 shadow-xl shadow-red-950 border border-red-500/30 mb-1">
-            <Wrench className="w-7 h-7 text-white" />
+          <div
+            className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl shadow-xl border mb-1 ${
+              isPortalMaster
+                ? 'bg-gradient-to-br from-amber-500 to-amber-700 shadow-amber-950/60 border-amber-400/50'
+                : 'bg-gradient-to-br from-red-600 to-red-800 shadow-red-950 border-red-500/30'
+            }`}
+          >
+            {isPortalMaster ? (
+              <Crown className="w-7 h-7 text-zinc-950" />
+            ) : (
+              <Wrench className="w-7 h-7 text-white" />
+            )}
           </div>
           <div className="flex items-center justify-center gap-2">
             <h1 className="text-3xl font-extrabold tracking-tight text-white font-mono">
-              AUTO<span className="text-red-500">OS</span>
+              AUTO<span className={isPortalMaster ? 'text-amber-400' : 'text-red-500'}>OS</span>
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-zinc-800 text-zinc-300 border border-zinc-700">
-              {portalRestritoLoja ? 'Acesso Exclusivo da Loja' : 'Área de Login'}
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                isPortalMaster
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-zinc-800 text-zinc-300 border-zinc-700'
+              }`}
+            >
+              {isPortalMaster
+                ? 'Administração Geral'
+                : portalRestritoLoja
+                ? 'Acesso Exclusivo da Loja'
+                : 'Área de Login'}
             </span>
           </div>
           <p className="text-xs text-zinc-400 max-w-sm mx-auto">
-            {portalRestritoLoja
+            {isPortalMaster
+              ? 'Portal Master exclusivo para gestão de lojas, usuários e configurações globais da plataforma.'
+              : portalRestritoLoja
               ? 'Portal protegido e vinculado exclusivamente aos usuários desta oficina.'
               : 'Acesso ao sistema de gestão e Ordens de Serviço automotivas.'}
           </p>
         </div>
 
         {/* Card do Formulário de Login */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-5">
+        <div
+          className={`bg-zinc-900 rounded-2xl p-6 shadow-2xl space-y-5 border ${
+            isPortalMaster ? 'border-amber-500/30' : 'border-zinc-800'
+          }`}
+        >
+          {/* Banner de Portal Master (/admin) */}
+          {isPortalMaster && (
+            <div className="p-3 bg-amber-950/30 border border-amber-500/30 rounded-xl flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Crown className="w-4 h-4 text-amber-400 shrink-0" />
+                <div className="truncate">
+                  <span className="text-[10px] uppercase font-bold text-amber-400 block tracking-wider">
+                    Link Exclusivo Master
+                  </span>
+                  <span className="text-xs font-bold text-white truncate block">
+                    Painel da Administração Geral (/admin)
+                  </span>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-950 text-amber-300 rounded border border-amber-500/30 shrink-0">
+                SUPERADMIN
+              </span>
+            </div>
+          )}
+
           {/* Banner de Loja / Oficina Exclusiva */}
-          {oficinaExibida?.nome && (
+          {!isPortalMaster && oficinaExibida?.nome && (
             <div className="p-3 bg-red-950/40 border border-red-800/50 rounded-xl space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -280,12 +354,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
             <button
               type="submit"
               disabled={carregando}
-              className="w-full py-3 px-4 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-red-950 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 border border-red-500"
+              className={`w-full py-3 px-4 font-bold text-xs sm:text-sm rounded-xl shadow-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 border ${
+                isPortalMaster
+                  ? 'bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-500 text-zinc-950 shadow-amber-950/40 border-amber-400'
+                  : 'bg-red-600 hover:bg-red-500 active:bg-red-700 text-white shadow-red-950 border-red-500'
+              }`}
             >
               {carregando ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Validando acesso da loja...</span>
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  <span>{isPortalMaster ? 'Autenticando Master...' : 'Validando acesso da loja...'}</span>
+                </>
+              ) : isPortalMaster ? (
+                <>
+                  <Crown className="w-4 h-4" />
+                  <span>Entrar na Administração Geral</span>
+                  <ArrowRight className="w-4 h-4" />
                 </>
               ) : (
                 <>
@@ -299,17 +383,35 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
           {/* Dica de segurança e primeiro acesso */}
           <div className="text-[11px] text-zinc-400 bg-zinc-950/60 p-3 rounded-xl border border-zinc-800 text-center space-y-1">
             <p className="font-semibold text-zinc-300">
-              {portalRestritoLoja ? 'Acesso Restrito à Unidade' : 'Primeiro acesso à sua oficina?'}
+              {isPortalMaster
+                ? 'Acesso Restrito (SUPERADMIN)'
+                : portalRestritoLoja
+                ? 'Acesso Restrito à Unidade'
+                : 'Primeiro acesso à sua oficina?'}
             </p>
             <p className="text-zinc-500 leading-relaxed">
-              {portalRestritoLoja
+              {isPortalMaster
+                ? 'Esta URL (/admin) é exclusiva para o Administrador Geral da plataforma. Contas de lojas individuais não possuem permissão aqui.'
+                : portalRestritoLoja
                 ? 'Este link é exclusivo desta loja. Apenas usuários vinculados a ela podem autenticar; acessos de outras lojas serão negados.'
                 : 'Utilize o e-mail e a senha cadastrados ou acesse pelo link exclusivo enviado para a sua oficina.'}
             </p>
           </div>
 
-          {/* Botão de Retorno ao Portal Master (apenas fora de links exclusivos de loja) */}
-          {onIrParaAdminGeral && !portalRestritoLoja && (
+          {isPortalMaster && (
+            <div className="pt-2 border-t border-zinc-800 text-center">
+              <button
+                type="button"
+                onClick={irParaLoginGeral}
+                className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-4 transition cursor-pointer"
+              >
+                Ir para o login padrão das oficinas
+              </button>
+            </div>
+          )}
+
+          {/* Botão de Retorno ao Portal Master (apenas fora de links exclusivos de loja e fora do próprio /admin) */}
+          {onIrParaAdminGeral && !portalRestritoLoja && !isPortalMaster && (
             <div className="pt-2 border-t border-zinc-800">
               <button
                 type="button"

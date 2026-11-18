@@ -113,6 +113,55 @@ export function extrairSlugDaUrl(pathname?: string): string | null {
 }
 
 /**
+ * Verifica se a URL atual corresponde ao link específico da Administração Geral (/admin, /master, /admin-geral ou ?portal=master).
+ */
+export function isRotaPortalMaster(pathname?: string, search?: string): boolean {
+  const path =
+    pathname !== undefined
+      ? pathname
+      : typeof window !== 'undefined'
+      ? window.location.pathname
+      : '';
+  if (/^\/(admin|master|admin-geral)\/?$/i.test(path)) {
+    return true;
+  }
+
+  const query =
+    search !== undefined
+      ? search
+      : typeof window !== 'undefined'
+      ? window.location.search
+      : '';
+  if (query) {
+    const params = new URLSearchParams(query);
+    if (
+      params.get('portal') === 'master' ||
+      params.get('master') === '1' ||
+      params.get('admin_geral') === '1'
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function gerarPathAdminGeral(): string {
+  return '/admin';
+}
+
+/**
+ * Gera o link específico para acesso exclusivo à Administração Geral (SUPERADMIN).
+ */
+export function gerarLinkAdminGeral(baseUrl?: string): string {
+  const origin = (
+    baseUrl ||
+    (typeof window !== 'undefined' ? window.location.origin : '') ||
+    'https://auto-os-gold.vercel.app'
+  ).replace(/\/+$/, '');
+  return `${origin}/admin`;
+}
+
+/**
  * Extrai parâmetros de acesso exclusivo de loja e vínculo de usuário a partir da URL atual.
  */
 export function extrairParametrosConvite(search?: string, pathname?: string): {
@@ -175,7 +224,7 @@ export function extrairParametrosConvite(search?: string, pathname?: string): {
     }
   }
 
-  const isPortalLoja = Boolean(tokenData || urlOficina || urlSlug);
+  const isPortalLoja = !isRotaPortalMaster(pathname, query) && Boolean(tokenData || urlOficina || urlSlug);
 
   return { tokenData, urlOficina, urlSlug, urlEmail, urlSenha, isPortalLoja };
 }

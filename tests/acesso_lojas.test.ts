@@ -35,6 +35,8 @@ import {
 import {
   gerarLinkExclusivoLoja,
   gerarPathLoja,
+  gerarLinkAdminGeral,
+  isRotaPortalMaster,
 } from '../src/utils/conviteSaaS';
 
 let passed = 0;
@@ -65,6 +67,34 @@ async function runTests() {
 
   await closePgEngine();
   await getPgEngine();
+
+  console.log('--- Cenário 0: Usuário Master Padrão e Alteração pelo Painel ---');
+  const usuariosIniciais = await UsuarioRepository.getAll();
+  const masterPadrao = usuariosIniciais.find((u) => u.id === 'admin_master' && u.perfil === 'SUPERADMIN');
+  assert(
+    Boolean(masterPadrao && masterPadrao.email === 'maxagencia@gmail.com' && masterPadrao.senha === 'admin137713'),
+    'Usuário Master inicial criado com e-mail maxagencia@gmail.com e senha admin137713'
+  );
+
+  if (masterPadrao) {
+    await UsuarioRepository.update(masterPadrao.id, {
+      nome: 'Max Master Atualizado',
+      email: 'novo.master@empresa.com',
+      senha: 'NovaSenhaMaster#99',
+    });
+    const usuariosPosUpdate = await UsuarioRepository.getAll();
+    const masterAtualizado = usuariosPosUpdate.find((u) => u.id === masterPadrao.id);
+    assert(
+      Boolean(
+        masterAtualizado &&
+          masterAtualizado.email === 'novo.master@empresa.com' &&
+          masterAtualizado.senha === 'NovaSenhaMaster#99' &&
+          masterAtualizado.nome === 'Max Master Atualizado'
+      ),
+      'Alteração de nome, e-mail e senha do Usuário Master via painel persiste corretamente'
+    );
+  }
+
   await wipeDatabaseClean();
 
   // -----------------------------------------------------------------------
@@ -179,6 +209,15 @@ async function runTests() {
 
   const superAdminNoLinkLoja = await autenticarUsuarioComVinculo(superAdmin.email, 'MasterPassword#2026', ctxRotaGeralLojaA);
   assert(!superAdminNoLinkLoja.sucesso && Boolean(superAdminNoLinkLoja.mensagem?.includes('Portal Master')), 'SUPERADMIN tentando entrar em link exclusivo de loja é NEGADO');
+
+  const linkAdminGeral = gerarLinkAdminGeral('https://app.autoos.test');
+  assert(linkAdminGeral === 'https://app.autoos.test/admin' && isRotaPortalMaster('/admin'), 'gerarLinkAdminGeral gera rota dedicada /admin reconhecida como Portal Master');
+
+  const lojistaNaRotaAdmin = await autenticarUsuarioComVinculo('carlos@alphamotors.com.br', 'SenhaAlpha!1', { pathname: '/admin', search: '' });
+  assert(!lojistaNaRotaAdmin.sucesso && Boolean(lojistaNaRotaAdmin.mensagem?.includes('SUPERADMIN')), 'Usuário comum de loja tentando logar pela rota /admin é NEGADO');
+
+  const superAdminNaRotaAdmin = await autenticarUsuarioComVinculo(superAdmin.email, 'MasterPassword#2026', { pathname: '/admin', search: '' });
+  assert(superAdminNaRotaAdmin.sucesso && superAdminNaRotaAdmin.usuario?.perfil === 'SUPERADMIN', 'SUPERADMIN autenticando pela rota dedicada /admin é PERMITIDO');
 
   const senhaMestraAdmin = await autenticarUsuarioComVinculo('carlos@alphamotors.com.br', 'admin', ctxLinkA);
   assert(!senhaMestraAdmin.sucesso, 'Bypass com senha universal "admin" é NEGADO');

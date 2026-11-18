@@ -444,13 +444,66 @@ async function initializeDatabase(db: PGlite): Promise<void> {
         'admin_master',
         OFICINA_PADRAO.id,
         'Administrador Geral (Master)',
-        'admin@autoos.com.br',
-        'admin',
+        'maxagencia@gmail.com',
+        'admin137713',
         'SUPERADMIN',
         true,
         '(11) 96944-0424',
       ]
     );
+  }
+
+  // 3.1. Migração única e idempotente para atualizar o usuário master legado para maxagencia@gmail.com
+  // Executa apenas uma vez por banco (registrada em `migrations`), preservando futuras alterações feitas pelo painel.
+  try {
+    const migMasterCheck = await db.query<{ count: string }>(
+      `SELECT count(*) as count FROM migrations WHERE name = '002_update_master_superadmin_maxagencia'`
+    );
+    if (parseInt(migMasterCheck.rows[0]?.count || '0', 10) === 0) {
+      const conflito = await db.query<{ id: string }>(
+        `SELECT id FROM usuarios WHERE LOWER(email) = 'maxagencia@gmail.com' AND id != 'admin_master' AND perfil != 'SUPERADMIN'`
+      );
+      if (conflito.rows.length === 0) {
+        const atualizado = await db.query<{ id: string }>(
+          `UPDATE usuarios
+           SET email = 'maxagencia@gmail.com',
+               senha = 'admin137713',
+               ativo = TRUE
+           WHERE id = 'admin_master'
+              OR (perfil = 'SUPERADMIN' AND LOWER(email) = 'admin@autoos.com.br')
+           RETURNING id`
+        );
+
+        if (atualizado.rows.length === 0) {
+          const jaTemSuper = await db.query<{ id: string }>(
+            `SELECT id FROM usuarios WHERE perfil = 'SUPERADMIN'`
+          );
+          if (jaTemSuper.rows.length === 0) {
+            await db.query(
+              `INSERT INTO usuarios (id, oficina_id, nome, email, senha, perfil, ativo, telefone)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+               ON CONFLICT (id) DO NOTHING`,
+              [
+                'admin_master',
+                OFICINA_PADRAO.id,
+                'Administrador Geral (Master)',
+                'maxagencia@gmail.com',
+                'admin137713',
+                'SUPERADMIN',
+                true,
+                '(11) 96944-0424',
+              ]
+            );
+          }
+        }
+      }
+
+      await db.query(
+        `INSERT INTO migrations (name) VALUES ('002_update_master_superadmin_maxagencia') ON CONFLICT (name) DO NOTHING`
+      );
+    }
+  } catch {
+    // Migração silenciosa para não interromper inicialização
   }
 
   // 4. Limpeza e sanitização automática de quaisquer dados legados com "Impérios Car"
