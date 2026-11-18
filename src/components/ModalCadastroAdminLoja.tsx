@@ -19,6 +19,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { UsuarioRepository, OficinaRepository } from '../services/dbRepository';
 import { Usuario, OficinaConfig } from '../types';
+import { gerarPathLoja } from '../utils/conviteSaaS';
 
 interface ModalCadastroAdminLojaProps {
   aberto: boolean;
@@ -190,9 +191,10 @@ export const ModalCadastroAdminLoja: React.FC<ModalCadastroAdminLojaProps> = ({
       }
       if (oficinaAtiva?.id) {
         localStorage.setItem('autoos_oficina_ativa_id', oficinaAtiva.id);
+        localStorage.setItem(`autoos_cadastro_loja_concluido_${oficinaAtiva.id}`, '1');
       }
-      if (typeof window !== 'undefined') {
-        window.history.replaceState({}, '', window.location.pathname);
+      if (typeof window !== 'undefined' && oficinaAtiva && usuarioAtual?.perfil !== 'SUPERADMIN') {
+        window.history.replaceState({}, '', gerarPathLoja(oficinaAtiva));
       }
 
       await recarregarUsuarios();

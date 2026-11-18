@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS oficina (
     data_expiracao VARCHAR(30),
     responsavel_nome VARCHAR(150),
     responsavel_contato VARCHAR(100),
+    slug VARCHAR(120) UNIQUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -353,6 +354,8 @@ async function initializeDatabase(db: PGlite): Promise<void> {
     'ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cidade VARCHAR(100)',
     'ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS estado VARCHAR(2)',
     "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS senha VARCHAR(255) DEFAULT '123'",
+    'ALTER TABLE oficina ADD COLUMN IF NOT EXISTS slug VARCHAR(120)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_oficina_slug ON oficina(slug)',
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_ordens_servico_numero ON ordens_servico(numero)',
   ];
 
@@ -362,6 +365,27 @@ async function initializeDatabase(db: PGlite): Promise<void> {
     } catch {
       // Ignora caso a coluna já exista
     }
+  }
+
+  // Garante que todas as oficinas existentes possuam slug único exclusivo
+  try {
+    const semSlug = await db.query<{ id: string; nome: string }>(
+      "SELECT id, nome FROM oficina WHERE slug IS NULL OR TRIM(slug) = ''"
+    );
+    for (const row of semSlug.rows) {
+      const base = (row.nome || 'loja')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40) || 'loja';
+      const sufixo = (row.id || 'matriz').replace(/^oficina_/, '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(-6) || '01';
+      const slugGerado = `${base}-${sufixo}`;
+      await db.query('UPDATE oficina SET slug = $1 WHERE id = $2', [slugGerado, row.id]);
+    }
+  } catch {
+    // Backfill silencioso
   }
 
   // 2. Registra migration inicial
@@ -473,8 +497,8 @@ export async function seedInitialData(db: PGlite): Promise<void> {
     `INSERT INTO oficina (
       id, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
       cep, logradouro, numero, complemento, bairro, cidade, estado, logo,
-      texto_institucional, texto_padrao_garantia, texto_padrao_condicoes
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+      texto_institucional, texto_padrao_garantia, texto_padrao_condicoes, slug
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
     [
       OFICINA_PADRAO.id,
       OFICINA_PADRAO.nome,
@@ -495,6 +519,7 @@ export async function seedInitialData(db: PGlite): Promise<void> {
       OFICINA_PADRAO.texto_institucional,
       OFICINA_PADRAO.texto_padrao_garantia,
       OFICINA_PADRAO.texto_padrao_condicoes,
+      OFICINA_PADRAO.slug || 'oficina-matriz',
     ]
   );
 
@@ -653,7 +678,7 @@ DELETE FROM oficina;
   // Oficina
   const oficinas = (await db.query<any>(`SELECT * FROM oficina`)).rows;
   for (const o of oficinas) {
-    sqlDump += `INSERT INTO oficina VALUES (${escapeSql(o.id)}, ${escapeSql(o.nome)}, ${escapeSql(o.razao_social)}, ${escapeSql(o.nome_fantasia)}, ${escapeSql(o.cnpj)}, ${escapeSql(o.telefone)}, ${escapeSql(o.whatsapp)}, ${escapeSql(o.email)}, ${escapeSql(o.cep)}, ${escapeSql(o.logradouro)}, ${escapeSql(o.numero)}, ${escapeSql(o.complemento)}, ${escapeSql(o.bairro)}, ${escapeSql(o.cidade)}, ${escapeSql(o.estado)}, ${escapeSql(o.logo)}, ${escapeSql(o.texto_institucional)}, ${escapeSql(o.texto_padrao_garantia)}, ${escapeSql(o.texto_padrao_condicoes)}, '${o.created_at || new Date().toISOString()}', '${o.updated_at || new Date().toISOString()}');\n`;
+    sqlDump += `INSERT INTO oficina (id, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email, cep, logradouro, numero, complemento, bairro, cidade, estado, logo, banner_cabecalho, cabecalho_fundo, cabecalho_logo, cabecalho_escritas, modo_cabecalho, texto_institucional, texto_padrao_garantia, texto_padrao_condicoes, status_empresa, plano, limite_os_mensal, data_expiracao, responsavel_nome, responsavel_contato, slug, created_at, updated_at) VALUES (${escapeSql(o.id)}, ${escapeSql(o.nome)}, ${escapeSql(o.razao_social)}, ${escapeSql(o.nome_fantasia)}, ${escapeSql(o.cnpj)}, ${escapeSql(o.telefone)}, ${escapeSql(o.whatsapp)}, ${escapeSql(o.email)}, ${escapeSql(o.cep)}, ${escapeSql(o.logradouro)}, ${escapeSql(o.numero)}, ${escapeSql(o.complemento)}, ${escapeSql(o.bairro)}, ${escapeSql(o.cidade)}, ${escapeSql(o.estado)}, ${escapeSql(o.logo)}, ${escapeSql(o.banner_cabecalho || '')}, ${escapeSql(o.cabecalho_fundo || '')}, ${escapeSql(o.cabecalho_logo || '')}, ${escapeSql(o.cabecalho_escritas || '')}, ${escapeSql(o.modo_cabecalho || 'composto')}, ${escapeSql(o.texto_institucional)}, ${escapeSql(o.texto_padrao_garantia)}, ${escapeSql(o.texto_padrao_condicoes)}, ${escapeSql(o.status_empresa || 'ATIVA')}, ${escapeSql(o.plano || 'PRO')}, ${Number(o.limite_os_mensal) || 500}, ${escapeSql(o.data_expiracao || '')}, ${escapeSql(o.responsavel_nome || '')}, ${escapeSql(o.responsavel_contato || '')}, ${escapeSql(o.slug || '')}, '${o.created_at || new Date().toISOString()}', '${o.updated_at || new Date().toISOString()}');\n`;
   }
 
   // Usuários
@@ -677,8 +702,8 @@ DELETE FROM oficina;
   // Ordens de Serviço
   const osList = (await db.query<any>(`SELECT * FROM ordens_servico`)).rows;
   for (const o of osList) {
-    sqlDump += `INSERT INTO ordens_servico VALUES (
-      ${escapeSql(o.id)}, ${o.numero}, ${escapeSql(o.numero_formatado)}, ${escapeSql(o.data)}, ${escapeSql(o.hora)},
+    sqlDump += `INSERT INTO ordens_servico (id, oficina_id, numero, numero_formatado, data, hora, cliente_id, veiculo_id, cliente_nome, cliente_cpf_cnpj, cliente_telefone, cliente_whatsapp, cliente_email, cliente_endereco, cliente_cep, veiculo_modelo, veiculo_marca, veiculo_ano, veiculo_cor, veiculo_placa, quilometragem, quilometragem_anterior, reclamacao_cliente, diagnostico_avaliacao, subtotal, desconto, acrescimo, total, forma_pagamento, observacoes, garantia, status, motivo_cancelamento, cancelado_por_usuario, data_cancelamento, usuario_responsavel_id, usuario_responsavel_nome, created_at, updated_at) VALUES (
+      ${escapeSql(o.id)}, ${escapeSql(o.oficina_id || 'oficina_matriz')}, ${o.numero}, ${escapeSql(o.numero_formatado)}, ${escapeSql(o.data)}, ${escapeSql(o.hora)},
       ${escapeSql(o.cliente_id)}, ${escapeSql(o.veiculo_id)}, ${escapeSql(o.cliente_nome)}, ${escapeSql(o.cliente_cpf_cnpj)},
       ${escapeSql(o.cliente_telefone)}, ${escapeSql(o.cliente_whatsapp)}, ${escapeSql(o.cliente_email)}, ${escapeSql(o.cliente_endereco)},
       ${escapeSql(o.cliente_cep)}, ${escapeSql(o.veiculo_modelo)}, ${escapeSql(o.veiculo_marca)}, ${o.veiculo_ano},
@@ -774,6 +799,16 @@ export async function restoreFromJson(backupData: any): Promise<void> {
     // Restaura oficina com colunas explicitamente declaradas
     if (d.oficina && d.oficina.length > 0) {
       for (const o of d.oficina) {
+        const fallbackBase = String(o.nome || 'loja')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+          .slice(0, 40) || 'loja';
+        const fallbackSufixo = String(o.id || '01').replace(/[^a-z0-9]/gi, '').toLowerCase().slice(-6) || '01';
+        const slugFinal = (o.slug && String(o.slug).trim()) ? String(o.slug).trim().toLowerCase() : `${fallbackBase}-${fallbackSufixo}`;
+
         await tx.command(
           `INSERT INTO oficina (
             id, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
@@ -781,11 +816,11 @@ export async function restoreFromJson(backupData: any): Promise<void> {
             banner_cabecalho, cabecalho_fundo, cabecalho_logo, cabecalho_escritas,
             modo_cabecalho, texto_institucional, texto_padrao_garantia, texto_padrao_condicoes,
             status_empresa, plano, limite_os_mensal, data_expiracao, responsavel_nome, responsavel_contato,
-            created_at, updated_at
+            slug, created_at, updated_at
           ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
             $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-            $31, $32
+            $31, $32, $33
           )`,
           [
             o.id,
@@ -818,6 +853,7 @@ export async function restoreFromJson(backupData: any): Promise<void> {
             o.data_expiracao || '',
             o.responsavel_nome || '',
             o.responsavel_contato || '',
+            slugFinal,
             toIso(o.created_at),
             toIso(o.updated_at),
           ]

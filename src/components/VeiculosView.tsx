@@ -47,7 +47,7 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
   onLimparVeiculoInicial,
   onVoltar,
 }) => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, oficinaAtiva } = useAuth();
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [search, setSearch] = useState('');
@@ -78,7 +78,7 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
 
   useEffect(() => {
     carregarDados();
-  }, [search]);
+  }, [search, oficinaAtiva?.id]);
 
   // Ao navegar via Busca Global para um veículo específico
   useEffect(() => {
@@ -94,8 +94,8 @@ export const VeiculosView: React.FC<VeiculosViewProps> = ({
     setLoading(true);
     try {
       const [veics, clis] = await Promise.all([
-        VeiculoRepository.getAll(search),
-        ClienteRepository.getAll(),
+        VeiculoRepository.getAll(search, oficinaAtiva?.id),
+        ClienteRepository.getAll('', oficinaAtiva?.id),
       ]);
       setVeiculos(veics);
       setClientes(clis);

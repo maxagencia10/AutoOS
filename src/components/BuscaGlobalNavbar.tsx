@@ -19,6 +19,7 @@ import {
 } from '../services/dbRepository';
 import { Cliente, Veiculo } from '../types';
 import { formatPlaca, formatCpfCnpj, formatPhone } from '../utils/formatters';
+import { useAuth } from '../context/AuthContext';
 
 interface BuscaGlobalNavbarProps {
   onSelectCliente: (cliente: Cliente) => void;
@@ -29,6 +30,7 @@ export const BuscaGlobalNavbar: React.FC<BuscaGlobalNavbarProps> = ({
   onSelectCliente,
   onSelectVeiculo,
 }) => {
+  const { oficinaAtiva, isSuperAdmin } = useAuth();
   const [termo, setTermo] = useState('');
   const [carregando, setCarregando] = useState(false);
   const [resultados, setResultados] = useState<ResultadoBuscaGlobal | null>(null);
@@ -61,7 +63,7 @@ export const BuscaGlobalNavbar: React.FC<BuscaGlobalNavbarProps> = ({
     setCarregando(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await BuscaGlobalRepository.buscar(termo);
+        const res = await BuscaGlobalRepository.buscar(termo, isSuperAdmin ? undefined : oficinaAtiva?.id);
         setResultados(res);
         setDropdownAberto(true);
         setIndiceFoco(-1);
@@ -73,7 +75,7 @@ export const BuscaGlobalNavbar: React.FC<BuscaGlobalNavbarProps> = ({
     }, 180);
 
     return () => clearTimeout(timer);
-  }, [termo]);
+  }, [termo, oficinaAtiva?.id, isSuperAdmin]);
 
   // Fecha o dropdown ao clicar fora
   useEffect(() => {

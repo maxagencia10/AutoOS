@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Usuario, OficinaConfig } from '../types';
 import { UsuarioRepository, SistemaRepository, OficinaRepository } from '../services/dbRepository';
-import { extrairParametrosConvite } from '../utils/conviteSaaS';
+import { extrairParametrosConvite, gerarPathLoja, gerarTokenConvite } from '../utils/conviteSaaS';
+import { autenticarUsuarioComVinculo, resolverLojaAlvoPorUrl } from '../services/authAccessService';
 
 interface AuthContextType {
   usuarioAtual: Usuario | null;
@@ -11,6 +12,8 @@ interface AuthContextType {
   isSuperAdmin: boolean;
   isAdmin: boolean;
   isMecanico: boolean;
+  isPortalLoja: boolean;
+  erroPortalLoja: string | null;
   carregando: boolean;
   isInstalado: boolean;
   isAutenticado: boolean;
@@ -20,7 +23,10 @@ interface AuthContextType {
   recarregarUsuarios: () => Promise<void>;
   recarregarOficinas: () => Promise<void>;
   promoverParaSuperAdmin: (usuarioId?: string) => Promise<void>;
-  loginUsuario: (identificador: string, senhaDigitada: string) => Promise<{ sucesso: boolean; mensagem?: string; usuario?: Usuario }>;
+  loginUsuario: (
+    identificador: string,
+    senhaDigitada: string
+  ) => Promise<{ sucesso: boolean; mensagem?: string; usuario?: Usuario; isPrimeiroAcesso?: boolean }>;
   loginAdminGeral: (identificador: string, senha?: string) => Promise<{ sucesso: boolean; mensagem?: string }>;
   logout: () => void;
   sairAdminGeral: () => void;
@@ -43,10 +49,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [usuarioAtual, setUsuarioAtual] = useState<Usuario | null>(null);
   const [oficinasDisponiveis, setOficinasDisponiveis] = useState<OficinaConfig[]>([]);
   const [oficinaAtiva, setOficinaAtiva] = useState<OficinaConfig | null>(null);
+  const [isPortalLoja, setIsPortalLoja] = useState<boolean>(false);
+  const [erroPortalLoja, setErroPortalLoja] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [isInstalado, setIsInstalado] = useState<boolean>(true);
   const [modalCadastroAdminLojaAberto, setModalCadastroAdminLojaAberto] = useState<boolean>(false);
-  
+
   // Domínio oficial de produção configurado para https://auto-os-gold.vercel.app
   const DOMINIO_OFICIAL_PADRAO = 'https://auto-os-gold.vercel.app';
 
@@ -92,10 +100,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const list = await OficinaRepository.getAll();
       setOficinasDisponiveis(list);
-      
+
       const salvaId = localStorage.getItem('autoos_oficina_ativa_id');
-      if (salvaId && list.some(o => o.id === salvaId)) {
-        setOficinaAtiva(list.find(o => o.id === salvaId) || list[0] || null);
+      if (salvaId && list.some((o) => o.id === salvaId)) {
+        setOficinaAtiva(list.find((o) => o.id === salvaId) || list[0] || null);
       } else if (list.length > 0) {
         setOficinaAtiva(list[0]);
         localStorage.setItem('autoos_oficina_ativa_id', list[0].id);
@@ -111,7 +119,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Acesso restrito: usuário lojista não pode acessar outras lojas.');
       return;
     }
-    const of = oficinasDisponiveis.find(o => o.id === oficinaId);
+    const of = oficinasDisponiveis.find((o) => o.id === oficinaId) || (await OficinaRepository.getById(oficinaId));
     if (of) {
       setOficinaAtiva(of);
       localStorage.setItem('autoos_oficina_ativa_id', of.id);
@@ -120,54 +128,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const recarregarUsuarios = async () => {
     try {
-      // 1. Extrai parâmetros de convite ou de URL (?convite=..., ?oficina=..., ?email=...)
-      const { tokenData, urlOficina, urlEmail, urlSenha } = extrairParametrosConvite();
-      const urlOficinaId = urlOficina;
+      setErroPortalLoja(null);
+      const { tokenData, urlOficina, urlSlug, isPortalLoja: portalLojaDetectado } = extrairParametrosConvite();
+      setIsPortalLoja(portalLojaDetectado);
+
       let urlForcarLogin = false;
       if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);
-        urlForcarLogin = urlParams.get('login') === '1' || urlParams.get('auth') === '1' || urlParams.get('logout') === '1';
+        urlForcarLogin =
+          urlParams.get('login') === '1' ||
+          urlParams.get('auth') === '1' ||
+          urlParams.get('logout') === '1';
       }
 
-      // Se temos token de convite ou URL com dados de oficina e email, provisiona automaticamente na máquina local
-      if (tokenData) {
-        await OficinaRepository.garantirOficina({
-          id: tokenData.oid,
-          nome: tokenData.nome,
-          razao_social: tokenData.nome,
-          nome_fantasia: tokenData.nome,
-          email: tokenData.email,
-          whatsapp: tokenData.whatsapp,
-          telefone: tokenData.telefone,
-          cidade: tokenData.cidade,
-          estado: tokenData.uf,
-          cnpj: tokenData.cnpj,
-          plano: (tokenData.plano as any) || 'PRO',
-          limite_os_mensal: tokenData.limite || 500,
-          responsavel_nome: tokenData.resp || tokenData.adminNome,
-          responsavel_contato: tokenData.contato || tokenData.whatsapp,
-        });
+      // Validação prévia do link da loja
+      const resolucaoUrl = await resolverLojaAlvoPorUrl();
+      if (resolucaoUrl.erroValidacao) {
+        setErroPortalLoja(resolucaoUrl.erroValidacao);
+        setUsuarioAtual(null);
+        localStorage.removeItem('autoos_usuario_sessao');
+      }
 
-        await UsuarioRepository.garantirUsuarioAdmin({
-          oficina_id: tokenData.oid,
-          nome: tokenData.adminNome || tokenData.nome || 'Administrador da Loja',
-          email: tokenData.email,
-          senha: tokenData.senha || 'auto123',
-          telefone: tokenData.whatsapp || '',
-        });
-      } else if (urlOficinaId && urlEmail) {
-        await OficinaRepository.garantirOficina({
-          id: urlOficinaId,
-          nome: urlOficinaId.replace(/^oficina_/, '').replace(/_/g, ' ') || 'Oficina Cadastrada',
-          email: urlEmail,
-        });
+      // Se temos token de convite válido (e sem conflito na URL), prepara o provisionamento em cold-start
+      if (tokenData && !resolucaoUrl.erroValidacao) {
+        try {
+          const ofGarantida = await OficinaRepository.garantirOficina({
+            id: tokenData.oid,
+            slug: tokenData.slug,
+            nome: tokenData.nome,
+            razao_social: tokenData.nome,
+            nome_fantasia: tokenData.nome,
+            email: tokenData.email,
+            whatsapp: tokenData.whatsapp,
+            telefone: tokenData.telefone,
+            cidade: tokenData.cidade,
+            estado: tokenData.uf,
+            cnpj: tokenData.cnpj,
+            plano: (tokenData.plano as any) || 'PRO',
+            limite_os_mensal: tokenData.limite || 500,
+            responsavel_nome: tokenData.resp || tokenData.adminNome,
+            responsavel_contato: tokenData.contato || tokenData.whatsapp,
+          });
 
-        await UsuarioRepository.garantirUsuarioAdmin({
-          oficina_id: urlOficinaId,
-          nome: 'Administrador da Loja',
-          email: urlEmail,
-          senha: urlSenha || 'auto123',
-        });
+          await UsuarioRepository.garantirUsuarioAdmin({
+            id: tokenData.uid,
+            oficina_id: ofGarantida.id,
+            nome: tokenData.adminNome || tokenData.nome || 'Administrador da Loja',
+            email: tokenData.email,
+            senha: tokenData.senha || 'auto123',
+            telefone: tokenData.whatsapp || '',
+            perfil: tokenData.perfil || 'ADMINISTRADOR',
+          });
+        } catch (provErr: any) {
+          setErroPortalLoja(provErr?.message || 'Link de acesso inválido ou em conflito com outra loja.');
+        }
       }
 
       let [instalado, list, oficinas] = await Promise.all([
@@ -176,18 +190,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         OficinaRepository.getAll(),
       ]);
 
-      if (tokenData || urlOficinaId) {
+      if (tokenData && !resolucaoUrl.erroValidacao) {
         instalado = true;
       }
 
       // Sanitização em tempo de execução para remover qualquer menção legada a Impérios Car
-      oficinas = oficinas.map(o => {
-        if (o.nome?.toLowerCase().includes('imperios') || o.nome_fantasia?.toLowerCase().includes('imperios') || o.razao_social?.toLowerCase().includes('imperios')) {
+      oficinas = oficinas.map((o) => {
+        if (
+          o.nome?.toLowerCase().includes('imperios') ||
+          o.nome_fantasia?.toLowerCase().includes('imperios') ||
+          o.razao_social?.toLowerCase().includes('imperios')
+        ) {
           return {
             ...o,
             nome: o.nome.replace(/imp[eé]rios\s*car/gi, 'Auto Mecânica Especializada').trim(),
-            razao_social: o.razao_social ? o.razao_social.replace(/imp[eé]rios\s*car/gi, 'Auto Mecânica Especializada').trim() : 'Auto Mecânica Especializada Ltda',
-            nome_fantasia: o.nome_fantasia ? o.nome_fantasia.replace(/imp[eé]rios\s*car/gi, 'Auto Mecânica Especializada').trim() : 'Auto Mecânica Especializada',
+            razao_social: o.razao_social
+              ? o.razao_social.replace(/imp[eé]rios\s*car/gi, 'Auto Mecânica Especializada').trim()
+              : 'Auto Mecânica Especializada Ltda',
+            nome_fantasia: o.nome_fantasia
+              ? o.nome_fantasia.replace(/imp[eé]rios\s*car/gi, 'Auto Mecânica Especializada').trim()
+              : 'Auto Mecânica Especializada',
             email: o.email?.toLowerCase().includes('imperios') ? 'contato@autoos.com.br' : o.email,
           };
         }
@@ -198,15 +220,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUsuariosDisponiveis(list);
       setOficinasDisponiveis(oficinas);
 
-      if (oficinas.length > 0) {
-        let escolhida = null;
-        if (urlOficinaId) {
-          escolhida = oficinas.find(o => o.id === urlOficinaId || o.id.toLowerCase() === urlOficinaId.toLowerCase());
+      // Identifica a loja alvo da URL (/loja/:slug ou ?oficina=)
+      let lojaAlvoUrl: OficinaConfig | null = null;
+      if (portalLojaDetectado) {
+        lojaAlvoUrl =
+          oficinas.find(
+            (o) =>
+              (urlOficina && o.id.toLowerCase() === urlOficina.toLowerCase()) ||
+              (urlSlug && o.slug?.toLowerCase() === urlSlug.toLowerCase())
+          ) || null;
+
+        if (lojaAlvoUrl) {
+          setOficinaAtiva(lojaAlvoUrl);
+          localStorage.setItem('autoos_oficina_ativa_id', lojaAlvoUrl.id);
+        } else {
+          setOficinaAtiva(null);
+          if (!resolucaoUrl.erroValidacao) {
+            setErroPortalLoja('Loja não encontrada para este link exclusivo.');
+          }
         }
-        if (!escolhida) {
-          const salvaId = localStorage.getItem('autoos_oficina_ativa_id');
-          escolhida = salvaId ? oficinas.find(o => o.id === salvaId) : null;
-        }
+      } else if (oficinas.length > 0) {
+        const salvaId = localStorage.getItem('autoos_oficina_ativa_id');
+        const escolhida = salvaId ? oficinas.find((o) => o.id === salvaId) : null;
         const oficinaFinal = escolhida || oficinas[0];
         setOficinaAtiva(oficinaFinal);
         localStorage.setItem('autoos_oficina_ativa_id', oficinaFinal.id);
@@ -217,54 +252,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // 1. Tenta recuperar sessão salva ativa primeiro - se o usuário já estiver logado, NUNCA derruba a sessão!
-      const sessaoId = localStorage.getItem('autoos_usuario_sessao');
-      const userSalvo = sessaoId ? list.find(u => u.id === sessaoId && u.ativo) : null;
-
-      if (userSalvo) {
-        setUsuarioAtual(userSalvo);
-        // Se usuário não for SUPERADMIN, amarra a oficina ativa exclusivamente à oficina dele!
-        if (userSalvo.perfil !== 'SUPERADMIN' && userSalvo.oficina_id) {
-          const ofUser = oficinas.find(o => o.id === userSalvo.oficina_id);
-          if (ofUser) {
-            setOficinaAtiva(ofUser);
-            localStorage.setItem('autoos_oficina_ativa_id', ofUser.id);
-          }
-        }
-        return;
-      }
-
-      // Se a URL solicitou explicitamente a tela de login (?login=1 ou convite) e NÃO há sessão salva ativa
+      // Se URL explicitamente pediu login (?login=1 / ?convite=), derruba sessão anterior para exigir autenticação
       if (urlForcarLogin || tokenData) {
         setUsuarioAtual(null);
         localStorage.removeItem('autoos_usuario_sessao');
         return;
       }
-        // Se a URL especificou oficina, busca o administrador ou usuário desta oficina
-        let defaultUser: Usuario | undefined;
-        if (urlOficinaId) {
-          defaultUser = list.find(u => (u.oficina_id === urlOficinaId || u.oficina_id?.toLowerCase() === urlOficinaId.toLowerCase()) && u.ativo && u.perfil === 'ADMINISTRADOR') ||
-                        list.find(u => (u.oficina_id === urlOficinaId || u.oficina_id?.toLowerCase() === urlOficinaId.toLowerCase()) && u.ativo);
-        }
-        
-        // Se não veio oficina na URL e nem usuário salvo, só entra como SUPERADMIN se não for convite de oficina
-        if (!defaultUser && !urlOficinaId) {
-          defaultUser = list.find(u => u.perfil === 'SUPERADMIN' && u.ativo) ||
-                        list.find(u => u.perfil === 'ADMINISTRADOR' && u.ativo) ||
-                        list[0];
+
+      // Tenta recuperar sessão salva ativa
+      const sessaoId = localStorage.getItem('autoos_usuario_sessao');
+      const userSalvo = sessaoId ? list.find((u) => u.id === sessaoId && u.ativo) : null;
+
+      if (userSalvo) {
+        // Se estamos em um link específico de loja (/loja/:slug ou ?oficina=)
+        if (portalLojaDetectado) {
+          const pertenceALojaAlvo =
+            lojaAlvoUrl &&
+            userSalvo.perfil !== 'SUPERADMIN' &&
+            userSalvo.oficina_id === lojaAlvoUrl.id &&
+            lojaAlvoUrl.status_empresa !== 'BLOQUEADA' &&
+            lojaAlvoUrl.status_empresa !== 'CANCELADA';
+
+          if (!pertenceALojaAlvo) {
+            // Sessão é de outra loja ou SUPERADMIN -> NUNCA aproveita sessão cruzada!
+            setUsuarioAtual(null);
+            localStorage.removeItem('autoos_usuario_sessao');
+            return;
+          }
+
+          setUsuarioAtual(userSalvo);
+          setOficinaAtiva(lojaAlvoUrl);
+          localStorage.setItem('autoos_oficina_ativa_id', lojaAlvoUrl!.id);
+          return;
         }
 
-        setUsuarioAtual(defaultUser || null);
-        if (defaultUser) {
-          localStorage.setItem('autoos_usuario_sessao', defaultUser.id);
-          if (defaultUser.perfil !== 'SUPERADMIN' && defaultUser.oficina_id) {
-            const ofUser = oficinas.find(o => o.id === defaultUser.oficina_id);
-            if (ofUser) {
-              setOficinaAtiva(ofUser);
-              localStorage.setItem('autoos_oficina_ativa_id', ofUser.id);
-            }
+        // Sem link específico de loja (acesso na raiz): valida status da loja se não for SUPERADMIN
+        if (userSalvo.perfil !== 'SUPERADMIN' && userSalvo.oficina_id) {
+          const ofUser = oficinas.find((o) => o.id === userSalvo.oficina_id);
+          if (!ofUser || ofUser.status_empresa === 'BLOQUEADA' || ofUser.status_empresa === 'CANCELADA') {
+            setUsuarioAtual(null);
+            localStorage.removeItem('autoos_usuario_sessao');
+            return;
           }
+          setOficinaAtiva(ofUser);
+          localStorage.setItem('autoos_oficina_ativa_id', ofUser.id);
         }
+
+        setUsuarioAtual(userSalvo);
+        return;
+      }
+
+      // Sem sessão salva -> permanece deslogado na tela de Login (nunca faz auto-login silencioso)
+      setUsuarioAtual(null);
     } catch (err) {
       console.error('Erro ao carregar usuários:', err);
     } finally {
@@ -289,11 +328,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const trocarUsuario = (usuarioId: string) => {
-    const user = usuariosDisponiveis.find(u => u.id === usuarioId);
+    // Somente SUPERADMIN pode alternar usuário livremente pela barra superior
+    if (usuarioAtual?.perfil !== 'SUPERADMIN') {
+      console.warn('Apenas o Administrador Geral (SUPERADMIN) pode alternar usuários.');
+      return;
+    }
+    const user = usuariosDisponiveis.find((u) => u.id === usuarioId);
     if (user) {
       setUsuarioAtual(user);
       localStorage.setItem('autoos_usuario_sessao', user.id);
-      // Se usuário for vinculado a uma oficina específica, sintoniza a oficina ativa
       if (user.oficina_id && user.perfil !== 'SUPERADMIN') {
         selecionarOficina(user.oficina_id);
       }
@@ -302,44 +345,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginAdminGeral = async (identificador: string, senhaDigitada?: string): Promise<{ sucesso: boolean; mensagem?: string }> => {
     try {
+      // Impede login master caso o navegador esteja travado em um link exclusivo de loja
+      const { isPortalLoja: portalAtivo } = extrairParametrosConvite();
+      if (portalAtivo) {
+        return {
+          sucesso: false,
+          mensagem: 'O Portal Master não pode ser acessado através de um link exclusivo de loja.',
+        };
+      }
+
       const todos = await UsuarioRepository.getAll();
       const idLimpo = identificador.trim().toLowerCase();
       const senhaLimpa = (senhaDigitada || '').trim();
 
-      // Procura pelo e-mail ou nome ou id
-      let alvo = todos.find(u => u.email.toLowerCase() === idLimpo || u.id.toLowerCase() === idLimpo || u.nome.toLowerCase() === idLimpo);
-
-      const isMasterKey = senhaLimpa === 'admin' || senhaLimpa === 'autoosmaster' || senhaLimpa === 'auto123' || idLimpo === 'admin';
-
-      if (alvo) {
-        if (senhaLimpa && !isMasterKey) {
-          const senhaEsperada = (alvo.senha || 'auto123').trim();
-          if (senhaEsperada && senhaEsperada !== senhaLimpa) {
-            return { sucesso: false, mensagem: 'Senha incorreta para este usuário.' };
-          }
-        }
-      } else {
-        if (isMasterKey) {
-          alvo = todos.find(u => u.perfil === 'SUPERADMIN') ||
-                 todos.find(u => u.perfil === 'ADMINISTRADOR') ||
-                 todos[0];
-        } else {
-          return { sucesso: false, mensagem: 'Usuário administrador não encontrado com este e-mail.' };
-        }
+      if (!idLimpo || !senhaLimpa) {
+        return { sucesso: false, mensagem: 'Informe o e-mail e a senha do Administrador Geral.' };
       }
+
+      const alvo = todos.find(
+        (u) =>
+          u.email.toLowerCase() === idLimpo ||
+          u.id.toLowerCase() === idLimpo ||
+          u.nome.toLowerCase() === idLimpo
+      );
 
       if (!alvo) {
-        return { sucesso: false, mensagem: 'Nenhum usuário disponível para login de Administrador Geral.' };
+        return { sucesso: false, mensagem: 'Usuário administrador não encontrado com este e-mail.' };
       }
 
-      // Garante perfil SUPERADMIN para acesso irrestrito a todas as oficinas
       if (alvo.perfil !== 'SUPERADMIN') {
-        await UsuarioRepository.promoverParaSuperAdmin(alvo.id);
-        alvo = { ...alvo, perfil: 'SUPERADMIN' };
+        return {
+          sucesso: false,
+          mensagem: 'Acesso negado: esta conta é de loja e não possui permissão de Administrador Geral (Master).',
+        };
+      }
+
+      if (!alvo.ativo) {
+        return { sucesso: false, mensagem: 'Este administrador está desativado no sistema.' };
+      }
+
+      const senhaEsperada = (alvo.senha || '').trim();
+      if (!senhaEsperada || senhaEsperada !== senhaLimpa) {
+        return { sucesso: false, mensagem: 'Senha incorreta para o Administrador Geral.' };
       }
 
       setUsuarioAtual(alvo);
       localStorage.setItem('autoos_usuario_sessao', alvo.id);
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, '', '/');
+      }
       await recarregarUsuarios();
       return { sucesso: true };
     } catch (e: any) {
@@ -350,119 +404,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginUsuario = async (
     identificador: string,
     senhaDigitada: string
-  ): Promise<{ sucesso: boolean; mensagem?: string; usuario?: Usuario }> => {
+  ): Promise<{ sucesso: boolean; mensagem?: string; usuario?: Usuario; isPrimeiroAcesso?: boolean }> => {
     try {
-      let todos = await UsuarioRepository.getAll();
-      const idLimpo = identificador.trim().toLowerCase();
-      const senhaLimpa = (senhaDigitada || '').trim();
-
-      let user = todos.find(
-        (u) =>
-          u.email.toLowerCase() === idLimpo ||
-          u.id.toLowerCase() === idLimpo ||
-          u.nome.toLowerCase() === idLimpo
-      );
-
-      // Se não encontrou, tenta auto-provisionar a partir do token de convite ou parâmetros de URL
-      if (!user) {
-        const { tokenData, urlOficina, urlEmail, urlSenha } = extrairParametrosConvite();
-
-        if (tokenData && (tokenData.email.toLowerCase() === idLimpo || !idLimpo || tokenData.oid)) {
-          const ofGarantida = await OficinaRepository.garantirOficina({
-            id: tokenData.oid,
-            nome: tokenData.nome,
-            razao_social: tokenData.nome,
-            nome_fantasia: tokenData.nome,
-            email: tokenData.email,
-            whatsapp: tokenData.whatsapp,
-            telefone: tokenData.telefone,
-            cidade: tokenData.cidade,
-            estado: tokenData.uf,
-            cnpj: tokenData.cnpj,
-            plano: (tokenData.plano as any) || 'PRO',
-            limite_os_mensal: tokenData.limite || 500,
-            responsavel_nome: tokenData.resp || tokenData.adminNome,
-            responsavel_contato: tokenData.contato || tokenData.whatsapp,
-          });
-
-          user = await UsuarioRepository.garantirUsuarioAdmin({
-            oficina_id: ofGarantida.id,
-            nome: tokenData.adminNome || tokenData.nome || 'Administrador da Loja',
-            email: idLimpo || tokenData.email.toLowerCase(),
-            senha: tokenData.senha || senhaLimpa || 'auto123',
-            telefone: tokenData.whatsapp || '',
-          });
-        } else if (urlOficina || oficinaAtiva) {
-          const alvoOficinaId = urlOficina || oficinaAtiva?.id || 'oficina_matriz';
-          const ofGarantida = await OficinaRepository.garantirOficina({
-            id: alvoOficinaId,
-            nome: oficinaAtiva?.nome || alvoOficinaId.replace(/^oficina_/, '').replace(/_/g, ' ') || 'Oficina Cadastrada',
-            email: idLimpo || urlEmail || '',
-          });
-
-          user = await UsuarioRepository.garantirUsuarioAdmin({
-            oficina_id: ofGarantida.id,
-            nome: 'Administrador da Loja',
-            email: idLimpo || urlEmail || `admin@${alvoOficinaId}.com`,
-            senha: senhaLimpa || urlSenha || 'auto123',
-          });
-        }
+      const resultado = await autenticarUsuarioComVinculo(identificador, senhaDigitada);
+      if (!resultado.sucesso || !resultado.usuario) {
+        return { sucesso: false, mensagem: resultado.mensagem || 'Falha na autenticação.' };
       }
 
-      if (!user) {
-        return { sucesso: false, mensagem: 'Usuário não encontrado com o e-mail ou nome informado.' };
-      }
+      const user = resultado.usuario;
+      const oficinaUser = resultado.oficina || null;
 
-      if (!user.ativo) {
-        return { sucesso: false, mensagem: 'Este usuário está desativado no sistema.' };
-      }
-
-      const senhaEsperada = (user.senha || 'auto123').trim();
-      const { urlSenha, tokenData } = extrairParametrosConvite();
-      const senhaConvite = tokenData?.senha?.trim() || urlSenha?.trim();
-      const isMasterKey =
-        senhaLimpa === 'admin' ||
-        senhaLimpa === 'autoosmaster' ||
-        senhaLimpa === 'auto123' ||
-        (!!senhaConvite && senhaLimpa === senhaConvite);
-
-      if (senhaEsperada && senhaEsperada !== senhaLimpa && !isMasterKey) {
-        return { sucesso: false, mensagem: 'Senha incorreta. Verifique sua senha e tente novamente.' };
-      }
+      // Atualiza listas em memória caso o cold-start tenha provisionado a loja/usuário
+      const [usersAtualizados, oficinasAtualizadas] = await Promise.all([
+        UsuarioRepository.getAll(),
+        OficinaRepository.getAll(),
+      ]);
+      setUsuariosDisponiveis(usersAtualizados);
+      setOficinasDisponiveis(oficinasAtualizadas);
 
       setUsuarioAtual(user);
       localStorage.setItem('autoos_usuario_sessao', user.id);
 
-      if (typeof window !== 'undefined') {
-        window.history.replaceState({}, '', window.location.pathname);
+      if (user.perfil !== 'SUPERADMIN' && oficinaUser) {
+        const ofRecente = oficinasAtualizadas.find((o) => o.id === oficinaUser.id) || oficinaUser;
+        setOficinaAtiva(ofRecente);
+        localStorage.setItem('autoos_oficina_ativa_id', ofRecente.id);
+        setIsPortalLoja(true);
+        if (typeof window !== 'undefined') {
+          window.history.replaceState({}, '', gerarPathLoja(ofRecente));
+        }
+      } else if (typeof window !== 'undefined') {
+        setIsPortalLoja(false);
+        window.history.replaceState({}, '', '/');
       }
 
-      if (user.oficina_id && user.perfil !== 'SUPERADMIN') {
-        await selecionarOficina(user.oficina_id);
-      }
-
-      return { sucesso: true, usuario: user };
+      return {
+        sucesso: true,
+        usuario: user,
+        isPrimeiroAcesso: resultado.isPrimeiroAcesso,
+      };
     } catch (e: any) {
       return { sucesso: false, mensagem: e.message || 'Erro ao realizar login.' };
     }
   };
 
   const logout = () => {
+    const eraLojista = usuarioAtual?.perfil !== 'SUPERADMIN';
+    const oficinaAtual = oficinaAtiva;
     setUsuarioAtual(null);
     localStorage.removeItem('autoos_usuario_sessao');
+    if (typeof window !== 'undefined') {
+      if (eraLojista && oficinaAtual) {
+        setIsPortalLoja(true);
+        window.history.replaceState({}, '', gerarPathLoja(oficinaAtual));
+      } else {
+        setIsPortalLoja(false);
+        window.history.replaceState({}, '', '/');
+      }
+    }
   };
 
   const sairAdminGeral = () => {
-    // Retorna para o administrador local da oficina ativa ou primeiro usuário comum
-    const usuarioOficina = usuariosDisponiveis.find(u => u.oficina_id === oficinaAtiva?.id && u.perfil !== 'SUPERADMIN') ||
-                           usuariosDisponiveis.find(u => u.perfil === 'ADMINISTRADOR') ||
-                           usuariosDisponiveis[0];
-    if (usuarioOficina) {
-      setUsuarioAtual(usuarioOficina);
-      localStorage.setItem('autoos_usuario_sessao', usuarioOficina.id);
-    } else {
-      logout();
-    }
+    logout();
   };
 
   const definirUsuarioAposInstalacao = (admin: Usuario, redirecionarParaLogin: boolean = true) => {
@@ -471,7 +474,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     recarregarOficinas();
 
     if (redirecionarParaLogin) {
-      // Exigência: após o cadastro do administrador e oficina, o sistema vai para a tela de login
       localStorage.removeItem('autoos_usuario_sessao');
       setUsuarioAtual(null);
     } else {
@@ -488,34 +490,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUsuariosDisponiveis([]);
       setOficinasDisponiveis([]);
       setOficinaAtiva(null);
+      setIsPortalLoja(false);
       setIsInstalado(false);
       localStorage.removeItem('autoos_usuario_sessao');
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, '', '/');
+      }
     } finally {
       setCarregando(false);
     }
   };
 
   const testarLoginLojista = (oficinaId: string, email?: string) => {
+    const of = oficinasDisponiveis.find((o) => o.id === oficinaId) || oficinaAtiva;
+    const userAlvo = email
+      ? usuariosDisponiveis.find((u) => u.oficina_id === oficinaId && u.email.toLowerCase() === email.toLowerCase())
+      : usuariosDisponiveis.find((u) => u.oficina_id === oficinaId && u.perfil !== 'SUPERADMIN');
+
     localStorage.removeItem('autoos_usuario_sessao');
     setUsuarioAtual(null);
-    if (typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
+
+    if (of) {
+      setOficinaAtiva(of);
+      localStorage.setItem('autoos_oficina_ativa_id', of.id);
+    }
+
+    if (typeof window !== 'undefined' && of) {
+      const slugPath = gerarPathLoja(of);
+      const url = new URL(window.location.origin + slugPath);
       url.searchParams.set('login', '1');
-      url.searchParams.set('oficina', oficinaId);
-      if (email) {
+      url.searchParams.set('oficina', of.id);
+      if (userAlvo) {
+        url.searchParams.set('email', userAlvo.email);
+        const token = gerarTokenConvite({
+          oid: of.id,
+          slug: of.slug,
+          uid: userAlvo.id,
+          perfil: userAlvo.perfil,
+          escopo: 'LOJA',
+          nome: of.nome,
+          email: userAlvo.email,
+          senha: userAlvo.senha || 'auto123',
+          adminNome: userAlvo.nome,
+          plano: of.plano || 'PRO',
+          limite: of.limite_os_mensal || 500,
+        });
+        url.searchParams.set('convite', token);
+      } else if (email) {
         url.searchParams.set('email', email);
       }
       window.history.pushState({}, '', url.toString());
-      const of = oficinasDisponiveis.find((o) => o.id === oficinaId);
-      if (of) setOficinaAtiva(of);
+      setIsPortalLoja(true);
     }
   };
 
   const isAutenticado = !!usuarioAtual;
   const isSuperAdmin = usuarioAtual?.perfil === 'SUPERADMIN';
-  const isAdmin = isSuperAdmin || 
-    (usuarioAtual?.perfil?.toString().trim().toUpperCase() === 'ADMINISTRADOR') ||
-    (usuarioAtual && usuarioAtual?.perfil?.toString().trim().toUpperCase() !== 'MECANICO');
+  const isAdmin =
+    isSuperAdmin ||
+    usuarioAtual?.perfil?.toString().trim().toUpperCase() === 'ADMINISTRADOR' ||
+    (!!usuarioAtual && usuarioAtual?.perfil?.toString().trim().toUpperCase() !== 'MECANICO');
   const isMecanico = !isSuperAdmin && usuarioAtual?.perfil?.toString().trim().toUpperCase() === 'MECANICO';
 
   return (
@@ -528,6 +562,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isSuperAdmin,
         isAdmin,
         isMecanico,
+        isPortalLoja,
+        erroPortalLoja,
         carregando,
         isInstalado,
         isAutenticado,

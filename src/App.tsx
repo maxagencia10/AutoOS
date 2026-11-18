@@ -126,13 +126,18 @@ function MainApp() {
     return (
       <>
         <LoginView
-          onLoginSucesso={(usuario) => {
+          onLoginSucesso={(usuario, isPrimeiroAcesso) => {
             if (usuario.perfil === 'SUPERADMIN') {
               handleSelectTab('admin_geral');
             } else {
               handleSelectTab('dashboard');
-              // Abre imediatamente a parte de cadastro do usuário administrador da loja
-              setModalCadastroAdminLojaAberto(true);
+              const jaConcluiu =
+                usuario.oficina_id &&
+                typeof window !== 'undefined' &&
+                localStorage.getItem(`autoos_cadastro_loja_concluido_${usuario.oficina_id}`) === '1';
+              if (usuario.perfil === 'ADMINISTRADOR' && (isPrimeiroAcesso || !jaConcluiu)) {
+                setModalCadastroAdminLojaAberto(true);
+              }
             }
           }}
           onIrParaAdminGeral={() => setAdminLoginModalAberto(true)}

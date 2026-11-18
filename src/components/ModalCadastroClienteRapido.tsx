@@ -4,6 +4,7 @@ import { ClienteRepository } from '../services/dbRepository';
 import { Cliente } from '../types';
 import { formatCpfCnpj, formatPhone } from '../utils/formatters';
 import { consultarCep, formatarCep } from '../utils/cep';
+import { useAuth } from '../context/AuthContext';
 
 interface ModalCadastroClienteRapidoProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export const ModalCadastroClienteRapido: React.FC<ModalCadastroClienteRapidoProp
   onClose,
   onClienteCadastrado,
 }) => {
+  const { oficinaAtiva } = useAuth();
   const [nome, setNome] = useState('');
   const [cpfCnpj, setCpfCnpj] = useState('');
   const [telefone, setTelefone] = useState('');
@@ -81,7 +83,7 @@ export const ModalCadastroClienteRapido: React.FC<ModalCadastroClienteRapidoProp
 
     try {
       const novo = await ClienteRepository.create({
-        oficina_id: 'oficina_matriz',
+        oficina_id: oficinaAtiva?.id || 'oficina_matriz',
         nome: nome.trim(),
         cpf_cnpj: cpfCnpj.trim(),
         telefone: telefone.trim(),

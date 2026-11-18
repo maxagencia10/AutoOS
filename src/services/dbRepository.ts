@@ -20,6 +20,7 @@ import {
   RegistroAtualizacao,
   PacoteAtualizacaoManifest,
 } from '../types';
+import { gerarSlugLoja, normalizarSlugBase } from '../utils/conviteSaaS';
 
 export const SistemaRepository = {
   /**
@@ -79,6 +80,7 @@ export const SistemaRepository = {
 
     const oficinaConfig: OficinaConfig = {
       id: oficinaId,
+      slug: gerarSlugLoja(dados.oficina.nome || 'Minha Oficina', oficinaId),
       nome: dados.oficina.nome || dados.oficina.nome_fantasia || 'Minha Oficina',
       razao_social: dados.oficina.razao_social || dados.oficina.nome,
       nome_fantasia: dados.oficina.nome_fantasia || dados.oficina.nome,
@@ -125,14 +127,15 @@ export const SistemaRepository = {
       // 2. Insere a Oficina
       await tx.command(
         `INSERT INTO oficina (
-          id, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
+          id, slug, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
           cep, logradouro, numero, complemento, bairro, cidade, estado, logo,
           banner_cabecalho, cabecalho_fundo, cabecalho_logo, cabecalho_escritas,
           modo_cabecalho, texto_institucional, texto_padrao_garantia, texto_padrao_condicoes,
           created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
         [
           oficinaConfig.id,
+          oficinaConfig.slug,
           oficinaConfig.nome,
           oficinaConfig.razao_social,
           oficinaConfig.nome_fantasia,
@@ -219,8 +222,50 @@ export const OficinaRepository = {
   },
 
   async getById(id: string): Promise<OficinaConfig | null> {
-    const rows = await executeQuery<OficinaConfig>('SELECT * FROM oficina WHERE id = $1', [id]);
+    const rows = await executeQuery<OficinaConfig>('SELECT * FROM oficina WHERE LOWER(id) = LOWER($1)', [id]);
     return rows[0] || null;
+  },
+
+  async getBySlug(slug: string): Promise<OficinaConfig | null> {
+    if (!slug || !slug.trim()) return null;
+    const rows = await executeQuery<OficinaConfig>('SELECT * FROM oficina WHERE LOWER(slug) = LOWER($1)', [slug.trim()]);
+    return rows[0] || null;
+  },
+
+  async resolverPorIdentificador(oficinaId?: string | null, slug?: string | null): Promise<OficinaConfig | null> {
+    if (oficinaId) {
+      const porId = await this.getById(oficinaId);
+      if (porId) return porId;
+    }
+    if (slug) {
+      const porSlug = await this.getBySlug(slug);
+      if (porSlug) return porSlug;
+    }
+    return null;
+  },
+
+  async gerarSlugUnico(nome: string, id: string, slugDesejado?: string, ignoreId?: string): Promise<string> {
+    const candidatoInicial = slugDesejado?.trim()
+      ? normalizarSlugBase(slugDesejado)
+      : gerarSlugLoja(nome, id);
+
+    let candidato = candidatoInicial;
+    let tentativa = 0;
+
+    while (tentativa < 20) {
+      const rows = await executeQuery<{ id: string }>(
+        'SELECT id FROM oficina WHERE LOWER(slug) = LOWER($1)',
+        [candidato]
+      );
+      const conflito = rows.find((r) => !ignoreId || r.id !== ignoreId);
+      if (!conflito) {
+        return candidato;
+      }
+      tentativa++;
+      candidato = `${candidatoInicial}-${tentativa + 1}`;
+    }
+
+    return `${candidatoInicial}-${Date.now().toString(36).slice(-4)}`;
   },
 
   async get(oficinaId?: string): Promise<OficinaConfig> {
@@ -232,6 +277,7 @@ export const OficinaRepository = {
     if (!rows.length) {
       return {
         id: 'oficina_matriz',
+        slug: 'minha-oficina-matriz',
         nome: 'Minha Oficina Mecânica',
         razao_social: '',
         nome_fantasia: '',
@@ -264,10 +310,13 @@ export const OficinaRepository = {
   },
 
   async create(data: Partial<OficinaConfig>): Promise<OficinaConfig> {
-    const id = data.id || 'oficina_' + Date.now();
+    const id = data.id || 'oficina_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5);
     const agora = new Date().toISOString();
+    const slugUnico = await this.gerarSlugUnico(data.nome || 'Nova Empresa', id, data.slug);
+
     const nova: OficinaConfig = {
       id,
+      slug: slugUnico,
       nome: data.nome || 'Nova Empresa',
       razao_social: data.razao_social || data.nome || '',
       nome_fantasia: data.nome_fantasia || data.nome || '',
@@ -303,15 +352,15 @@ export const OficinaRepository = {
 
     await executeCommand(
       `INSERT INTO oficina (
-        id, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
+        id, slug, nome, razao_social, nome_fantasia, cnpj, telefone, whatsapp, email,
         cep, logradouro, numero, complemento, bairro, cidade, estado, logo,
         texto_institucional, texto_padrao_garantia, texto_padrao_condicoes,
         banner_cabecalho, cabecalho_fundo, cabecalho_logo, cabecalho_escritas, modo_cabecalho,
         status_empresa, plano, limite_os_mensal, data_expiracao, responsavel_nome, responsavel_contato,
         created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)`,
       [
-        nova.id, nova.nome, nova.razao_social, nova.nome_fantasia, nova.cnpj,
+        nova.id, nova.slug, nova.nome, nova.razao_social, nova.nome_fantasia, nova.cnpj,
         nova.telefone, nova.whatsapp, nova.email, nova.cep, nova.logradouro,
         nova.numero, nova.complemento, nova.bairro, nova.cidade, nova.estado,
         nova.logo, nova.texto_institucional, nova.texto_padrao_garantia, nova.texto_padrao_condicoes,
@@ -330,17 +379,32 @@ export const OficinaRepository = {
     oficinaData: Partial<OficinaConfig>,
     adminData: { nome: string; email: string; senha?: string; telefone?: string }
   ): Promise<{ oficina: OficinaConfig; adminUser: Usuario }> {
+    const emailNorm = adminData.email.trim().toLowerCase();
+    const existente = await executeQuery<{ id: string; oficina_id: string }>(
+      'SELECT id, oficina_id FROM usuarios WHERE LOWER(email) = LOWER($1)',
+      [emailNorm]
+    );
+    if (existente.length > 0) {
+      throw new Error(`O e-mail "${emailNorm}" já está em uso por outro usuário/loja. Informe um e-mail exclusivo para esta loja.`);
+    }
+
     const oficina = await this.create(oficinaData);
-    const adminUser = await UsuarioRepository.create({
-      oficina_id: oficina.id,
-      nome: adminData.nome.trim() || 'Administrador',
-      email: adminData.email.trim().toLowerCase(),
-      senha: adminData.senha || 'auto123',
-      telefone: adminData.telefone || oficina.whatsapp || '',
-      perfil: 'ADMINISTRADOR',
-      ativo: true,
-    });
-    return { oficina, adminUser };
+    try {
+      const adminUser = await UsuarioRepository.create({
+        oficina_id: oficina.id,
+        nome: adminData.nome.trim() || 'Administrador',
+        email: emailNorm,
+        senha: adminData.senha || 'auto123',
+        telefone: adminData.telefone || oficina.whatsapp || '',
+        perfil: 'ADMINISTRADOR',
+        ativo: true,
+      });
+      return { oficina, adminUser };
+    } catch (err) {
+      // Limpa oficina recém-criada caso falhe a criação do usuário administrador
+      await executeCommand('DELETE FROM oficina WHERE id = $1', [oficina.id]).catch(() => {});
+      throw err;
+    }
   },
 
   async garantirOficina(data: Partial<OficinaConfig>): Promise<OficinaConfig> {
@@ -351,15 +415,23 @@ export const OficinaRepository = {
     if (!existente) {
       return await this.create(data);
     }
-    // Se existir, atualiza com os dados recebidos
-    await this.update(data, data.id);
-    return (await this.getById(data.id))!;
+    // Preserva customizações já salvas pela loja; garante apenas slug se ausente
+    if (!existente.slug) {
+      const slug = await this.gerarSlugUnico(existente.nome, existente.id, data.slug, existente.id);
+      await executeCommand('UPDATE oficina SET slug = $1 WHERE id = $2', [slug, existente.id]);
+      return (await this.getById(existente.id))!;
+    }
+    return existente;
   },
 
   async update(config: Partial<OficinaConfig>, targetOficinaId?: string): Promise<void> {
     const idToUpdate = targetOficinaId || config.id;
     const current = idToUpdate ? (await this.getById(idToUpdate)) || (await this.get()) : await this.get();
-    const updated = { ...current, ...config, updated_at: new Date().toISOString() };
+    const slugFinal = config.slug
+      ? await this.gerarSlugUnico(config.nome || current.nome, current.id, config.slug, current.id)
+      : current.slug || (await this.gerarSlugUnico(config.nome || current.nome, current.id, undefined, current.id));
+
+    const updated = { ...current, ...config, slug: slugFinal, updated_at: new Date().toISOString() };
 
     // Se a oficina não existir na tabela, cria
     const check = await executeQuery<{ count: string }>('SELECT count(*) as count FROM oficina WHERE id = $1', [updated.id]);
@@ -370,18 +442,19 @@ export const OficinaRepository = {
 
     await executeCommand(
       `UPDATE oficina SET
-        nome = $1, razao_social = $2, nome_fantasia = $3, cnpj = $4,
-        telefone = $5, whatsapp = $6, email = $7, cep = $8,
-        logradouro = $9, numero = $10, complemento = $11, bairro = $12,
-        cidade = $13, estado = $14, logo = $15, texto_institucional = $16,
-        texto_padrao_garantia = $17, texto_padrao_condicoes = $18,
-        banner_cabecalho = $19, cabecalho_fundo = $20, cabecalho_logo = $21,
-        cabecalho_escritas = $22, modo_cabecalho = $23,
-        status_empresa = $24, plano = $25, limite_os_mensal = $26,
-        data_expiracao = $27, responsavel_nome = $28, responsavel_contato = $29,
-        updated_at = $30
-       WHERE id = $31`,
+        slug = $1, nome = $2, razao_social = $3, nome_fantasia = $4, cnpj = $5,
+        telefone = $6, whatsapp = $7, email = $8, cep = $9,
+        logradouro = $10, numero = $11, complemento = $12, bairro = $13,
+        cidade = $14, estado = $15, logo = $16, texto_institucional = $17,
+        texto_padrao_garantia = $18, texto_padrao_condicoes = $19,
+        banner_cabecalho = $20, cabecalho_fundo = $21, cabecalho_logo = $22,
+        cabecalho_escritas = $23, modo_cabecalho = $24,
+        status_empresa = $25, plano = $26, limite_os_mensal = $27,
+        data_expiracao = $28, responsavel_nome = $29, responsavel_contato = $30,
+        updated_at = $31
+       WHERE id = $32`,
       [
+        updated.slug,
         updated.nome,
         updated.razao_social,
         updated.nome_fantasia,
@@ -515,17 +588,26 @@ export const UsuarioRepository = {
     }
   },
 
-  async create(user: Omit<Usuario, 'id'>): Promise<Usuario> {
-    const id = 'user_' + Date.now();
+  async create(user: Omit<Usuario, 'id'> & { id?: string }): Promise<Usuario> {
+    const emailNorm = user.email.trim().toLowerCase();
+    const duplicado = await executeQuery<{ id: string }>(
+      'SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1)',
+      [emailNorm]
+    );
+    if (duplicado.length > 0) {
+      throw new Error(`Já existe um usuário cadastrado com o e-mail "${emailNorm}".`);
+    }
+
+    const id = user.id || ('user_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5));
     await executeCommand(
       `INSERT INTO usuarios (id, oficina_id, nome, email, senha, telefone, cep, logradouro, numero, bairro, cidade, estado, perfil, ativo)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         id,
         user.oficina_id || 'oficina_matriz',
-        user.nome,
-        user.email,
-        user.senha || '123',
+        user.nome.trim(),
+        emailNorm,
+        (user.senha || '123').trim(),
         user.telefone || '',
         user.cep || '',
         user.logradouro || '',
@@ -541,52 +623,52 @@ export const UsuarioRepository = {
   },
 
   async garantirUsuarioAdmin(dados: {
+    id?: string;
     oficina_id: string;
     nome: string;
     email: string;
     senha?: string;
     telefone?: string;
+    perfil?: Usuario['perfil'];
   }): Promise<Usuario> {
+    if (!dados.oficina_id) {
+      throw new Error('Identificador da loja obrigatório para vincular usuário.');
+    }
+
     const todos = await this.getAll();
     const emailLimpo = dados.email.trim().toLowerCase();
-    
-    // Procura por email ou por perfil ADMINISTRADOR nessa oficina
-    let user = todos.find((u) => u.email.toLowerCase() === emailLimpo);
-    if (!user && dados.oficina_id) {
-      user = todos.find((u) => u.oficina_id === dados.oficina_id && u.perfil === 'ADMINISTRADOR');
+    const perfilAlvo = dados.perfil && dados.perfil !== 'SUPERADMIN' ? dados.perfil : 'ADMINISTRADOR';
+
+    // 1. Verifica se o e-mail já existe no banco em OUTRA loja — nunca reatribui ou sequestra!
+    const conflitoEmail = todos.find((u) => u.email.toLowerCase() === emailLimpo);
+    if (conflitoEmail) {
+      if (conflitoEmail.oficina_id !== dados.oficina_id) {
+        throw new Error(`Conflito de acesso: o e-mail "${emailLimpo}" pertence a outra oficina e não pode ser vinculado a esta loja.`);
+      }
+      // Já existe exatamente nesta oficina: preserva senha/dados já alterados pelo usuário
+      return conflitoEmail;
     }
 
-    if (user) {
-      const atualizacoes: Partial<Usuario> = {};
-      if (dados.senha && user.senha !== dados.senha) {
-        atualizacoes.senha = dados.senha;
+    // 2. Se informou uid do convite, verifica se já existe nesta mesma oficina
+    if (dados.id) {
+      const porId = todos.find((u) => u.id === dados.id);
+      if (porId) {
+        if (porId.oficina_id !== dados.oficina_id) {
+          throw new Error('Conflito de vínculo: identificador de usuário pertence a outra loja.');
+        }
+        return porId;
       }
-      if (dados.oficina_id && user.oficina_id !== dados.oficina_id) {
-        atualizacoes.oficina_id = dados.oficina_id;
-      }
-      if (dados.nome && user.nome !== dados.nome) {
-        atualizacoes.nome = dados.nome;
-      }
-      if (dados.email && user.email.toLowerCase() !== emailLimpo) {
-        atualizacoes.email = emailLimpo;
-      }
-      if (dados.telefone && !user.telefone) {
-        atualizacoes.telefone = dados.telefone;
-      }
-      if (Object.keys(atualizacoes).length > 0) {
-        await this.update(user.id, atualizacoes);
-        return (await this.getById(user.id))!;
-      }
-      return user;
     }
 
+    // 3. Provisiona estritamente vinculado à oficina_id informada
     return await this.create({
-      oficina_id: dados.oficina_id || 'oficina_matriz',
+      id: dados.id,
+      oficina_id: dados.oficina_id,
       nome: dados.nome || 'Administrador da Loja',
       email: emailLimpo,
       senha: dados.senha || 'auto123',
       telefone: dados.telefone || '',
-      perfil: 'ADMINISTRADOR',
+      perfil: perfilAlvo,
       ativo: true,
     });
   },
@@ -598,19 +680,27 @@ export const UsuarioRepository = {
 
     if (user.nome !== undefined) {
       fields.push(`nome = $${idx++}`);
-      values.push(user.nome);
+      values.push(user.nome.trim());
     }
     if (user.oficina_id !== undefined) {
       fields.push(`oficina_id = $${idx++}`);
       values.push(user.oficina_id);
     }
     if (user.email !== undefined) {
+      const emailNorm = user.email.trim().toLowerCase();
+      const duplicado = await executeQuery<{ id: string }>(
+        'SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1) AND id != $2',
+        [emailNorm, id]
+      );
+      if (duplicado.length > 0) {
+        throw new Error(`O e-mail "${emailNorm}" já está em uso por outro usuário.`);
+      }
       fields.push(`email = $${idx++}`);
-      values.push(user.email);
+      values.push(emailNorm);
     }
     if (user.senha) {
       fields.push(`senha = $${idx++}`);
-      values.push(user.senha);
+      values.push(user.senha.trim());
     }
     if (user.telefone !== undefined) {
       fields.push(`telefone = $${idx++}`);
@@ -669,17 +759,24 @@ export const UsuarioRepository = {
 };
 
 export const ClienteRepository = {
-  async getAll(search = ''): Promise<Cliente[]> {
+  async getAll(search = '', oficinaId?: string): Promise<Cliente[]> {
+    const params: any[] = [];
+    const clauses: string[] = [];
+    let idx = 1;
+
+    if (oficinaId) {
+      clauses.push(`oficina_id = $${idx++}`);
+      params.push(oficinaId);
+    }
     if (search.trim()) {
       const term = `%${search.trim()}%`;
-      return executeQuery<Cliente>(
-        `SELECT * FROM clientes
-         WHERE nome ILIKE $1 OR cpf_cnpj ILIKE $1 OR telefone ILIKE $1 OR whatsapp ILIKE $1
-         ORDER BY nome ASC`,
-        [term]
-      );
+      clauses.push(`(nome ILIKE $${idx} OR cpf_cnpj ILIKE $${idx} OR telefone ILIKE $${idx} OR whatsapp ILIKE $${idx})`);
+      params.push(term);
+      idx++;
     }
-    return executeQuery<Cliente>('SELECT * FROM clientes ORDER BY nome ASC');
+
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    return executeQuery<Cliente>(`SELECT * FROM clientes ${where} ORDER BY nome ASC`, params);
   },
 
   async getById(id: string): Promise<Cliente | null> {
@@ -763,16 +860,27 @@ export const ClienteRepository = {
 };
 
 export const VeiculoRepository = {
-  async getAll(search = ''): Promise<Veiculo[]> {
+  async getAll(search = '', oficinaId?: string): Promise<Veiculo[]> {
     let sql = `
       SELECT v.*, c.nome as cliente_nome
       FROM veiculos v
       JOIN clientes c ON c.id = v.cliente_id
     `;
     const params: any[] = [];
+    const clauses: string[] = [];
+    let idx = 1;
+
+    if (oficinaId) {
+      clauses.push(`c.oficina_id = $${idx++}`);
+      params.push(oficinaId);
+    }
     if (search.trim()) {
-      sql += ` WHERE v.placa ILIKE $1 OR v.veiculo ILIKE $1 OR v.marca ILIKE $1 OR c.nome ILIKE $1`;
+      clauses.push(`(v.placa ILIKE $${idx} OR v.veiculo ILIKE $${idx} OR v.marca ILIKE $${idx} OR c.nome ILIKE $${idx})`);
       params.push(`%${search.trim()}%`);
+      idx++;
+    }
+    if (clauses.length > 0) {
+      sql += ` WHERE ${clauses.join(' AND ')}`;
     }
     sql += ` ORDER BY v.created_at DESC`;
     return executeQuery<Veiculo>(sql, params);
@@ -889,11 +997,16 @@ export const OrdemServicoRepository = {
     status?: string;
     clienteId?: string;
     veiculoId?: string;
+    oficinaId?: string;
   }): Promise<OrdemServico[]> {
     let sql = `SELECT * FROM ordens_servico WHERE 1=1`;
     const params: any[] = [];
     let idx = 1;
 
+    if (filters?.oficinaId) {
+      sql += ` AND oficina_id = $${idx++}`;
+      params.push(filters.oficinaId);
+    }
     if (filters?.status) {
       sql += ` AND status = $${idx++}`;
       params.push(filters.status);
@@ -993,7 +1106,7 @@ export const OrdemServicoRepository = {
 
       await tx.command(
         `INSERT INTO ordens_servico (
-          id, numero, numero_formatado, data, hora, cliente_id, veiculo_id,
+          id, oficina_id, numero, numero_formatado, data, hora, cliente_id, veiculo_id,
           cliente_nome, cliente_cpf_cnpj, cliente_telefone, cliente_whatsapp, cliente_email,
           cliente_endereco, cliente_cep, veiculo_modelo, veiculo_marca, veiculo_ano,
           veiculo_cor, veiculo_placa, quilometragem, quilometragem_anterior,
@@ -1003,10 +1116,11 @@ export const OrdemServicoRepository = {
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
           $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
-          $33, $34, $35
+          $33, $34, $35, $36
         )`,
         [
           id,
+          data.oficina_id || 'oficina_matriz',
           num,
           numFormatado,
           data.data,
@@ -1246,7 +1360,7 @@ export const OrdemServicoRepository = {
     return this.getHistoricoByOsId(osId);
   },
 
-  async getMetrics(): Promise<{
+  async getMetrics(oficinaId?: string): Promise<{
     total: number;
     abertas: number;
     aguardando: number;
@@ -1260,9 +1374,16 @@ export const OrdemServicoRepository = {
     totalClientes: number;
     totalVeiculos: number;
   }> {
-    const all = await this.getAll();
-    const clientes = await executeQuery<{ count: string }>('SELECT count(*) as count FROM clientes');
-    const veiculos = await executeQuery<{ count: string }>('SELECT count(*) as count FROM veiculos');
+    const all = await this.getAll(oficinaId ? { oficinaId } : undefined);
+    const clientes = oficinaId
+      ? await executeQuery<{ count: string }>('SELECT count(*) as count FROM clientes WHERE oficina_id = $1', [oficinaId])
+      : await executeQuery<{ count: string }>('SELECT count(*) as count FROM clientes');
+    const veiculos = oficinaId
+      ? await executeQuery<{ count: string }>(
+          'SELECT count(*) as count FROM veiculos v JOIN clientes c ON c.id = v.cliente_id WHERE c.oficina_id = $1',
+          [oficinaId]
+        )
+      : await executeQuery<{ count: string }>('SELECT count(*) as count FROM veiculos');
 
     const abertas = all.filter(o => o.status === 'ABERTA').length;
     const aguardando = all.filter(o => o.status === 'AGUARDANDO APROVAÇÃO').length;
@@ -1881,7 +2002,7 @@ export const BuscaGlobalRepository = {
    * Busca unificada e veloz de clientes (por Nome, CPF/CNPJ ou WhatsApp)
    * e veículos (por Placa, Modelo, Marca ou Nome do Proprietário)
    */
-  async buscar(termo: string): Promise<ResultadoBuscaGlobal> {
+  async buscar(termo: string, oficinaId?: string): Promise<ResultadoBuscaGlobal> {
     const raw = termo.trim();
     if (!raw) {
       return { clientes: [], veiculos: [] };
@@ -1892,21 +2013,29 @@ export const BuscaGlobalRepository = {
     const likeClean = cleanDigits ? `%${cleanDigits}%` : likeTerm;
 
     try {
+      const clienteScopeSql = oficinaId ? 'c.oficina_id = $3 AND ' : '';
+      const clienteParams = oficinaId ? [likeTerm, likeClean, oficinaId] : [likeTerm, likeClean];
+
+      const veiculoScopeSql = oficinaId ? 'c.oficina_id = $3 AND ' : '';
+      const veiculoParams = oficinaId ? [likeTerm, likeClean, oficinaId] : [likeTerm, likeClean];
+
       const [clientes, veiculos] = await Promise.all([
         executeQuery<ResultadoBuscaGlobalCliente>(
           `SELECT c.*,
             COALESCE((SELECT count(*) FROM veiculos v WHERE v.cliente_id = c.id), 0)::int as total_veiculos,
             COALESCE((SELECT count(*) FROM ordens_servico os WHERE os.cliente_id = c.id), 0)::int as total_os
            FROM clientes c
-           WHERE c.nome ILIKE $1
+           WHERE ${clienteScopeSql}(
+              c.nome ILIKE $1
               OR c.cpf_cnpj ILIKE $1
               OR REPLACE(REPLACE(REPLACE(c.cpf_cnpj, '.', ''), '-', ''), '/', '') ILIKE $2
               OR c.telefone ILIKE $1
               OR c.whatsapp ILIKE $1
               OR REPLACE(REPLACE(REPLACE(REPLACE(c.whatsapp, '(', ''), ')', ''), '-', ''), ' ', '') ILIKE $2
+           )
            ORDER BY c.nome ASC
            LIMIT 8`,
-          [likeTerm, likeClean]
+          clienteParams
         ),
         executeQuery<ResultadoBuscaGlobalVeiculo>(
           `SELECT v.*,
@@ -1917,15 +2046,17 @@ export const BuscaGlobalRepository = {
             COALESCE((SELECT count(*) FROM ordens_servico os WHERE os.veiculo_id = v.id), 0)::int as total_os
            FROM veiculos v
            JOIN clientes c ON c.id = v.cliente_id
-           WHERE v.placa ILIKE $1
+           WHERE ${veiculoScopeSql}(
+              v.placa ILIKE $1
               OR REPLACE(v.placa, '-', '') ILIKE $2
               OR v.veiculo ILIKE $1
               OR v.marca ILIKE $1
               OR c.nome ILIKE $1
               OR c.cpf_cnpj ILIKE $1
+           )
            ORDER BY v.created_at DESC
            LIMIT 8`,
-          [likeTerm, likeClean]
+          veiculoParams
         ),
       ]);
 

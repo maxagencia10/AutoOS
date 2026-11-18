@@ -97,14 +97,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
         setPacotesPendentes(info.totalPacotes);
       }
     }).catch(() => {});
-  }, []);
+  }, [oficinaAtiva?.id]);
 
   const carregarDados = async () => {
     setLoading(true);
     try {
+      const oficinaId = oficinaAtiva?.id;
       const [m, osList] = await Promise.all([
-        OrdemServicoRepository.getMetrics(),
-        OrdemServicoRepository.getAll(),
+        OrdemServicoRepository.getMetrics(oficinaId),
+        OrdemServicoRepository.getAll({ oficinaId }),
       ]);
       setMetrics(m);
       setTodasOS(osList);

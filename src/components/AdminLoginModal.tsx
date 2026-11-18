@@ -28,7 +28,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
   onFechar,
   onSucesso,
 }) => {
-  const { loginAdminGeral, usuariosDisponiveis, oficinasDisponiveis } = useAuth();
+  const { loginAdminGeral } = useAuth();
   const [identificador, setIdentificador] = useState('');
   const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
@@ -37,11 +37,6 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
   const [sucessoMsg, setSucessoMsg] = useState('');
 
   if (!aberto) return null;
-
-  // Filtra administradores registrados para ajudar o dono caso ele esqueça o e-mail
-  const adminsRegistrados = usuariosDisponiveis.filter(
-    (u) => u.perfil === 'SUPERADMIN' || u.perfil === 'ADMINISTRADOR'
-  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,14 +65,6 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
     } finally {
       setCarregando(false);
     }
-  };
-
-  const selecionarAdminRapido = (email: string, senhaPadrao?: string) => {
-    setIdentificador(email);
-    if (senhaPadrao) {
-      setSenha(senhaPadrao);
-    }
-    setErro('');
   };
 
   return (
@@ -201,49 +188,8 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
             )}
           </button>
 
-          {/* Seleção Rápida de Administrador Encontrado no Sistema */}
-          {adminsRegistrados.length > 0 && (
-            <div className="pt-3 border-t border-zinc-800">
-              <p className="text-[11px] font-semibold text-zinc-400 mb-2 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>Administradores Cadastrados no Banco:</span>
-              </p>
-              <div className="space-y-1.5 max-h-36 overflow-y-auto scrollbar-thin">
-                {adminsRegistrados.map((u) => {
-                  const of = oficinasDisponiveis.find((o) => o.id === u.oficina_id);
-                  return (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => selecionarAdminRapido(u.email, u.senha || 'auto123')}
-                      className="w-full text-left p-2 rounded-lg bg-zinc-950/70 hover:bg-zinc-800/80 border border-zinc-800 hover:border-amber-500/40 transition flex items-center justify-between group cursor-pointer"
-                    >
-                      <div className="truncate mr-2">
-                        <div className="flex items-center gap-1.5">
-                          <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                          <span className="text-xs font-semibold text-zinc-200 group-hover:text-amber-300">
-                            {u.nome}
-                          </span>
-                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400">
-                            {u.perfil}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-zinc-400 truncate pl-5">
-                          {u.email} {of ? `• ${of.nome}` : ''}
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-bold text-amber-400/80 group-hover:text-amber-300 shrink-0">
-                        Usar este
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           <div className="text-[11px] text-zinc-400 text-center bg-zinc-950/40 p-2.5 rounded-lg border border-zinc-800/60">
-            Dica: Se você acabou de criar o sistema ou precisa recuperar o acesso mestre, utilize a senha mestre padrão (ex: <code className="text-amber-400 font-mono">admin</code> ou <code className="text-amber-400 font-mono">auto123</code>).
+            Acesso restrito a contas com perfil <strong>SUPERADMIN</strong> (Administrador Geral da Plataforma).
           </div>
         </form>
       </div>

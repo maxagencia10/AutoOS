@@ -3,36 +3,32 @@ import {
   Wrench,
   Lock,
   Mail,
-  Key,
   Eye,
   EyeOff,
   ArrowRight,
-  ShieldCheck,
   AlertCircle,
   CheckCircle2,
-  Building2,
-  Users,
-  Sparkles,
   Crown,
-  Check,
   Store,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Usuario } from '../types';
 import { extrairParametrosConvite, DadosConviteLoja } from '../utils/conviteSaaS';
 
 interface LoginViewProps {
-  onLoginSucesso?: (usuario: Usuario) => void;
+  onLoginSucesso?: (usuario: Usuario, isPrimeiroAcesso?: boolean) => void;
   onIrParaAdminGeral?: () => void;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAdminGeral }) => {
   const {
     loginUsuario,
-    usuariosDisponiveis,
     oficinasDisponiveis,
     oficinaAtiva,
     selecionarOficina,
+    isPortalLoja: isPortalLojaContext,
+    erroPortalLoja,
   } = useAuth();
 
   const [identificador, setIdentificador] = useState('');
@@ -42,53 +38,74 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
   const [erro, setErro] = useState('');
   const [sucessoMsg, setSucessoMsg] = useState('');
 
-  // Identifica parâmetros da URL (?oficina=ID, ?email=EMAIL, ?login=1, ?convite=TOKEN)
+  // Identifica parâmetros da URL (/loja/:slug, ?oficina=ID, ?email=EMAIL, ?convite=TOKEN)
   const [oficinaUrlNome, setOficinaUrlNome] = useState<string | null>(null);
   const [oficinaUrlPlano, setOficinaUrlPlano] = useState<string | null>(null);
+  const [oficinaUrlSlug, setOficinaUrlSlug] = useState<string | null>(null);
+  const [emailVinculadoLink, setEmailVinculadoLink] = useState<string | null>(null);
   const [isAcessoLojistaConvite, setIsAcessoLojistaConvite] = useState<boolean>(false);
   const [conviteData, setConviteData] = useState<DadosConviteLoja | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const { tokenData, urlOficina, urlEmail, urlSenha } = extrairParametrosConvite();
+      const { tokenData, urlOficina, urlSlug, urlEmail, isPortalLoja } = extrairParametrosConvite();
 
       if (tokenData) {
         setConviteData(tokenData);
         setIsAcessoLojistaConvite(true);
         setIdentificador(tokenData.email);
-        if (tokenData.senha) {
-          setSenha(tokenData.senha);
-        }
+        setEmailVinculadoLink(tokenData.email.toLowerCase());
         setOficinaUrlNome(tokenData.nome);
         setOficinaUrlPlano(tokenData.plano || 'PRO');
+        setOficinaUrlSlug(tokenData.slug || urlSlug);
         selecionarOficina(tokenData.oid);
       } else {
+        setConviteData(null);
         if (urlEmail) {
           setIdentificador(urlEmail);
+          setEmailVinculadoLink(urlEmail.toLowerCase());
+        } else {
+          setEmailVinculadoLink(null);
         }
-        if (urlSenha) {
-          setSenha(urlSenha);
-        }
-        if (urlOficina) {
+
+        if (isPortalLoja) {
           setIsAcessoLojistaConvite(true);
           const ofAlvo = oficinasDisponiveis.find(
-            (o) => o.id === urlOficina || o.id.toLowerCase() === urlOficina.toLowerCase()
+            (o) =>
+              (urlOficina && o.id.toLowerCase() === urlOficina.toLowerCase()) ||
+              (urlSlug && o.slug?.toLowerCase() === urlSlug.toLowerCase())
           );
           if (ofAlvo) {
             setOficinaUrlNome(ofAlvo.nome);
             setOficinaUrlPlano(ofAlvo.plano || 'PRO');
+            setOficinaUrlSlug(ofAlvo.slug || urlSlug);
             selecionarOficina(ofAlvo.id);
+          } else {
+            setOficinaUrlNome(null);
+            setOficinaUrlSlug(urlSlug);
           }
+        } else {
+          setIsAcessoLojistaConvite(false);
         }
       }
     }
   }, [oficinasDisponiveis]);
 
+  useEffect(() => {
+    if (erroPortalLoja) {
+      setErro(erroPortalLoja);
+    }
+  }, [erroPortalLoja]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const idUsar = identificador.trim() || conviteData?.email || '';
+    const idUsar = identificador.trim();
     if (!idUsar) {
       setErro('Informe seu e-mail ou nome de usuário cadastrado.');
+      return;
+    }
+    if (!senha.trim()) {
+      setErro('Informe sua senha de acesso.');
       return;
     }
 
@@ -102,10 +119,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
         const user = res.usuario;
         setSucessoMsg(`Bem-vindo, ${user.nome || 'Lojista'}! Entrando no sistema...`);
         setTimeout(() => {
-          if (onLoginSucesso) onLoginSucesso(user);
-        }, 500);
+          if (onLoginSucesso) onLoginSucesso(user, res.isPrimeiroAcesso);
+        }, 400);
       } else {
-        setErro(res.mensagem || 'Credenciais inválidas. Verifique seu e-mail e senha.');
+        setErro(res.mensagem || 'Credenciais inválidas ou não vinculadas a esta loja.');
       }
     } catch (err: any) {
       setErro(err.message || 'Erro ao processar login.');
@@ -114,24 +131,19 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
     }
   };
 
-  const selecionarUsuarioAtalho = (email: string, senhaPadrao?: string, oficinaId?: string) => {
-    setIdentificador(email);
-    if (senhaPadrao) setSenha(senhaPadrao);
-    if (oficinaId) {
-      selecionarOficina(oficinaId);
-    }
-    setErro('');
-  };
+  const portalRestritoLoja = isPortalLojaContext || isAcessoLojistaConvite;
 
-  // Identifica a oficina atual para exibição
-  const oficinaExibida =
-    oficinaAtiva ||
-    (oficinaUrlNome ? { nome: oficinaUrlNome, plano: oficinaUrlPlano || 'PRO' } : null);
+  // Identifica a oficina exibida exclusivamente quando em portal de loja ou ativa
+  const oficinaExibida = portalRestritoLoja
+    ? oficinaAtiva ||
+      (oficinaUrlNome
+        ? { nome: oficinaUrlNome, plano: oficinaUrlPlano || 'PRO', slug: oficinaUrlSlug || '' }
+        : null)
+    : null;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-center items-center px-4 py-8 font-sans antialiased">
       <div className="w-full max-w-md space-y-6">
-        
         {/* Marca & Logo AutoOS */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-red-600 to-red-800 shadow-xl shadow-red-950 border border-red-500/30 mb-1">
@@ -142,34 +154,53 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
               AUTO<span className="text-red-500">OS</span>
             </h1>
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-zinc-800 text-zinc-300 border border-zinc-700">
-              Área de Login
+              {portalRestritoLoja ? 'Acesso Exclusivo da Loja' : 'Área de Login'}
             </span>
           </div>
           <p className="text-xs text-zinc-400 max-w-sm mx-auto">
-            Acesso ao sistema de gestão e Ordens de Serviço automotivas.
+            {portalRestritoLoja
+              ? 'Portal protegido e vinculado exclusivamente aos usuários desta oficina.'
+              : 'Acesso ao sistema de gestão e Ordens de Serviço automotivas.'}
           </p>
         </div>
 
         {/* Card do Formulário de Login */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-5">
-          
-          {/* Banner de Loja / Oficina de Destino (quando o link vem de WhatsApp ou do painel) */}
+          {/* Banner de Loja / Oficina Exclusiva */}
           {oficinaExibida?.nome && (
-            <div className="p-3 bg-red-950/40 border border-red-800/50 rounded-xl flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <Store className="w-4 h-4 text-red-400 shrink-0" />
-                <div className="truncate">
-                  <span className="text-[10px] uppercase font-bold text-red-400 block tracking-wider">
-                    Acesso à Loja
-                  </span>
-                  <span className="text-xs font-bold text-white truncate block">
-                    {oficinaExibida.nome}
-                  </span>
+            <div className="p-3 bg-red-950/40 border border-red-800/50 rounded-xl space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Store className="w-4 h-4 text-red-400 shrink-0" />
+                  <div className="truncate">
+                    <span className="text-[10px] uppercase font-bold text-red-400 block tracking-wider">
+                      Link Exclusivo da Loja
+                    </span>
+                    <span className="text-xs font-bold text-white truncate block">
+                      {oficinaExibida.nome}
+                    </span>
+                  </div>
                 </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-zinc-300 rounded border border-zinc-700 shrink-0">
+                  {oficinaExibida.plano || 'PRO'}
+                </span>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 bg-zinc-900 text-zinc-300 rounded border border-zinc-700 shrink-0">
-                {oficinaExibida.plano || 'PRO'}
-              </span>
+
+              {(oficinaExibida.slug || emailVinculadoLink) && (
+                <div className="pt-1.5 border-t border-red-900/40 flex flex-col gap-1 text-[11px] text-zinc-300">
+                  {oficinaExibida.slug && (
+                    <div className="flex items-center gap-1.5 text-zinc-400 font-mono truncate">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span className="truncate">/loja/{oficinaExibida.slug}</span>
+                    </div>
+                  )}
+                  {emailVinculadoLink && (
+                    <div className="text-[11px] text-amber-300/90 truncate">
+                      Vínculo obrigatório: <strong className="font-mono">{emailVinculadoLink}</strong>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -178,7 +209,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
               <div className="p-3 bg-red-950/60 border border-red-800/80 rounded-xl flex items-start gap-2.5 text-xs text-red-200 animate-in fade-in">
                 <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <p className="font-semibold">Erro ao entrar</p>
+                  <p className="font-semibold">Acesso não autorizado</p>
                   <p className="text-red-300/90 mt-0.5">{erro}</p>
                 </div>
               </div>
@@ -195,7 +226,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
             <div>
               <label className="block text-xs font-semibold text-zinc-300 mb-1.5 flex items-center justify-between">
                 <span>E-mail do Administrador ou Usuário</span>
-                <span className="text-[11px] text-zinc-500 font-normal">Enviado no WhatsApp</span>
+                {emailVinculadoLink && (
+                  <span className="text-[11px] text-emerald-400 font-normal">Vinculado ao link</span>
+                )}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
@@ -217,7 +250,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
             <div>
               <label className="block text-xs font-semibold text-zinc-300 mb-1.5 flex items-center justify-between">
                 <span>Senha de Acesso</span>
-                <span className="text-[11px] text-zinc-500 font-normal">Senha inicial enviada</span>
+                <span className="text-[11px] text-zinc-500 font-normal">Digite sua senha</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
@@ -241,23 +274,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
                   {mostrarSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-
-              {conviteData?.senha && (
-                <div className="flex items-center justify-between text-[11px] pt-1">
-                  <span className="text-zinc-400">Senha recebida no WhatsApp:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSenha(conviteData.senha);
-                      setErro('');
-                    }}
-                    className="text-red-400 hover:text-red-300 font-mono font-bold cursor-pointer underline flex items-center gap-1"
-                  >
-                    <Key className="w-3 h-3" />
-                    Preencher "{conviteData.senha}"
-                  </button>
-                </div>
-              )}
             </div>
 
             {/* Botão Entrar */}
@@ -269,87 +285,31 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
               {carregando ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Autenticando...</span>
+                  <span>Validando acesso da loja...</span>
                 </>
               ) : (
                 <>
-                  <span>Entrar e Abrir Cadastro da Loja</span>
+                  <span>{conviteData ? 'Entrar e Abrir Cadastro da Loja' : 'Entrar na Oficina'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
 
-          {/* Dica para primeiro acesso */}
+          {/* Dica de segurança e primeiro acesso */}
           <div className="text-[11px] text-zinc-400 bg-zinc-950/60 p-3 rounded-xl border border-zinc-800 text-center space-y-1">
             <p className="font-semibold text-zinc-300">
-              Primeiro acesso à sua oficina?
+              {portalRestritoLoja ? 'Acesso Restrito à Unidade' : 'Primeiro acesso à sua oficina?'}
             </p>
             <p className="text-zinc-500 leading-relaxed">
-              Utilize o e-mail e a senha temporária enviados pelo WhatsApp. Após o login, você poderá confirmar seus dados e definir sua senha pessoal.
+              {portalRestritoLoja
+                ? 'Este link é exclusivo desta loja. Apenas usuários vinculados a ela podem autenticar; acessos de outras lojas serão negados.'
+                : 'Utilize o e-mail e a senha cadastrados ou acesse pelo link exclusivo enviado para a sua oficina.'}
             </p>
           </div>
 
-          {/* Atalho de Usuários Cadastrados para Teste Rápido */}
-          {(() => {
-            const usuariosFiltrados = isAcessoLojistaConvite && oficinaAtiva
-              ? usuariosDisponiveis.filter((u) => u.oficina_id === oficinaAtiva.id && u.perfil !== 'SUPERADMIN')
-              : usuariosDisponiveis;
-
-            if (usuariosFiltrados.length === 0) return null;
-
-            return (
-              <div className="pt-2 border-t border-zinc-800 space-y-2">
-                <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                  <span className="font-semibold flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-amber-400" />
-                    {isAcessoLojistaConvite ? 'Usuários desta oficina:' : 'Usuários criados (clique para testar):'}
-                  </span>
-                </div>
-                <div className="space-y-1.5 max-h-36 overflow-y-auto scrollbar-thin">
-                  {usuariosFiltrados.map((u) => {
-                    const of = oficinasDisponiveis.find((o) => o.id === u.oficina_id);
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => selecionarUsuarioAtalho(u.email, u.senha || 'auto123', u.oficina_id)}
-                        className="w-full text-left p-2 rounded-lg bg-zinc-950/80 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition flex items-center justify-between group cursor-pointer text-xs"
-                      >
-                        <div className="truncate mr-2">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-semibold text-zinc-200 group-hover:text-white">
-                              {u.nome}
-                            </span>
-                            <span
-                              className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
-                                u.perfil === 'SUPERADMIN'
-                                  ? 'bg-amber-500/20 text-amber-300'
-                                  : u.perfil === 'ADMINISTRADOR'
-                                  ? 'bg-blue-500/20 text-blue-300'
-                                  : 'bg-zinc-700 text-zinc-300'
-                              }`}
-                            >
-                              {u.perfil}
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-zinc-400 truncate">
-                            {u.email} {of ? `• ${of.nome}` : ''}
-                          </p>
-                        </div>
-                        <span className="text-[10px] font-bold text-red-400 group-hover:text-red-300 shrink-0">
-                          Usar
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Botão de Retorno ao Portal Master / Administrador Geral Micro-SaaS */}
-          {onIrParaAdminGeral && !isAcessoLojistaConvite && (
+          {/* Botão de Retorno ao Portal Master (apenas fora de links exclusivos de loja) */}
+          {onIrParaAdminGeral && !portalRestritoLoja && (
             <div className="pt-2 border-t border-zinc-800">
               <button
                 type="button"
@@ -368,7 +328,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSucesso, onIrParaAd
           <p>AutoOS • Plataforma Multi-Lojas para Oficinas Mecânicas</p>
           <p className="text-zinc-600">PostgreSQL WASM local com persistência segura no navegador</p>
         </div>
-
       </div>
     </div>
   );

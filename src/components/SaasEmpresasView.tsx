@@ -31,7 +31,7 @@ import {
 import { OficinaConfig, PlanoSaaS, StatusEmpresa, Usuario } from '../types';
 import { OficinaRepository, OrdemServicoRepository, UsuarioRepository } from '../services/dbRepository';
 import { useAuth } from '../context/AuthContext';
-import { gerarTokenConvite } from '../utils/conviteSaaS';
+import { gerarLinkExclusivoLoja } from '../utils/conviteSaaS';
 
 export const SaasEmpresasView: React.FC = () => {
   const {
@@ -166,29 +166,16 @@ export const SaasEmpresasView: React.FC = () => {
 
   const gerarLinkLoja = (emp: OficinaConfig, user: Usuario | null, senhaCustom?: string) => {
     const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app');
-    const emailUsar = (user?.email || emp.email || `admin@${emp.id}.com`).trim();
-    const senhaUsar = (senhaCustom || user?.senha || 'auto123').trim();
-    const token = gerarTokenConvite({
-      oid: emp.id,
-      nome: emp.nome,
-      email: emailUsar,
-      senha: senhaUsar,
-      adminNome: user?.nome || emp.responsavel_nome || emp.nome,
-      plano: emp.plano || 'PRO',
-      limite: emp.limite_os_mensal || 500,
-      whatsapp: emp.whatsapp || emp.telefone || '',
-      telefone: emp.telefone || '',
-      cidade: emp.cidade || '',
-      uf: emp.estado || 'SP',
-      cnpj: emp.cnpj || '',
-      resp: emp.responsavel_nome || '',
-      contato: emp.responsavel_contato || '',
+    return gerarLinkExclusivoLoja({
+      baseUrl: origin,
+      oficina: emp,
+      usuario: user,
+      senhaCustom,
     });
-    return `${origin}/?login=1&oficina=${emp.id}&email=${encodeURIComponent(emailUsar)}&convite=${token}`;
   };
 
   const montarTextoWhatsApp = (emp: OficinaConfig, user: Usuario | null, senhaCustom?: string) => {
-    const emailUsar = (user?.email || emp.email || `admin@${emp.id}.com`).trim();
+    const emailUsar = (user?.email || emp.email || `admin@${emp.id}.com`).trim().toLowerCase();
     const senhaUsar = (senhaCustom || user?.senha || 'auto123').trim();
     const link = gerarLinkLoja(emp, user, senhaUsar);
     const resp = emp.responsavel_nome ? `Olá, *${emp.responsavel_nome}*!` : 'Olá!';
@@ -196,12 +183,12 @@ export const SaasEmpresasView: React.FC = () => {
     return (
       `🚗🔧 *ACESSO LIBERADO - AUTOOS OFICINAS*\n\n` +
       `${resp} O sistema de gestão e Ordem de Serviço da sua oficina *${emp.nome}* já está liberado e ativo no Plano *${emp.plano || 'PRO'}*!\n\n` +
-      `🌐 *Link de Acesso Direto à Loja:*\n${link}\n\n` +
+      `🌐 *Link Exclusivo da Loja (vinculado ao seu usuário):*\n${link}\n\n` +
       `👤 *Seu E-mail / Usuário:* ${emailUsar}\n` +
       `🔑 *Sua Senha Inicial:* ${senhaUsar}\n\n` +
       `📋 *Como Acessar:*\n` +
-      `1. Abra o link acima no seu celular ou computador.\n` +
-      `2. O sistema abrirá a tela de login exclusiva da sua loja com o seu e-mail preenchido.\n` +
+      `1. Abra o link exclusivo acima no seu celular ou computador.\n` +
+      `2. Este link é vinculado especificamente à sua loja e ao seu usuário.\n` +
       `3. Digite sua senha para entrar e logo em seguida confirme os dados do seu cadastro de administrador e da oficina.\n` +
       `4. Pronto! Você já pode cadastrar clientes, veículos e emitir Ordens de Serviço completas!\n\n` +
       `Qualquer dúvida estamos à disposição!`
@@ -451,6 +438,11 @@ export const SaasEmpresasView: React.FC = () => {
                       <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
                         {emp.cnpj ? `CNPJ: ${emp.cnpj}` : 'CNPJ não informado'}
                       </p>
+                      {emp.slug && (
+                        <p className="text-[10px] text-emerald-400/90 font-mono mt-0.5 truncate max-w-[210px]">
+                          /loja/{emp.slug}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -835,12 +827,12 @@ export const SaasEmpresasView: React.FC = () => {
               
               {/* Card do Link Direto de Acesso */}
               <div className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 space-y-1.5">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider">
-                    Link Direto com Login da Loja
+                    Link Exclusivo da Loja (Vinculado ao Usuário)
                   </span>
                   <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
-                    Oficina ID: {empresaAcesso.id}
+                    /loja/{empresaAcesso.slug || empresaAcesso.id}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -859,7 +851,10 @@ export const SaasEmpresasView: React.FC = () => {
                     <span>{copiadoLink ? 'Copiado!' : 'Copiar'}</span>
                   </button>
                 </div>
-                <p className="text-[10px] text-amber-400/90 pt-1 leading-tight">
+                <p className="text-[10px] text-emerald-400/90 pt-1 leading-tight">
+                  🔒 Este link é exclusivo desta loja e vinculado a <strong>{adminAcesso?.email || empresaAcesso.email}</strong>. Outros logins ou lojas serão negados automaticamente.
+                </p>
+                <p className="text-[10px] text-amber-400/90 leading-tight">
                   ⚠️ <strong>Pediu login na Vercel?</strong> Vá em <em>Vercel &gt; Settings &gt; Deployment Protection</em> e desative o <em>Vercel Authentication</em> para que seus clientes acessem direto.
                 </p>
               </div>

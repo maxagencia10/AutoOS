@@ -29,6 +29,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { SaasEmpresasView } from './SaasEmpresasView';
 import { UsuariosView } from './UsuariosView';
+import { gerarLinkExclusivoLoja } from '../utils/conviteSaaS';
 
 interface AdminGeralViewProps {
   onVoltarParaOficina?: () => void;
@@ -67,14 +68,19 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
 
   const adminDestaOficina =
     usuariosDisponiveis.find(
-      (u) => u.oficina_id === oficinaAlvo?.id && (u.perfil === 'ADMINISTRADOR' || u.perfil === 'SUPERADMIN')
+      (u) => u.oficina_id === oficinaAlvo?.id && u.perfil === 'ADMINISTRADOR'
     ) ||
-    usuariosDisponiveis.find((u) => u.oficina_id === oficinaAlvo?.id) ||
-    usuariosDisponiveis[0];
+    usuariosDisponiveis.find((u) => u.oficina_id === oficinaAlvo?.id && u.perfil !== 'SUPERADMIN') ||
+    null;
 
   const originUrl = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app');
-  const emailParam = adminDestaOficina?.email ? `&email=${encodeURIComponent(adminDestaOficina.email)}` : '';
-  const linkAcessoDireto = `${originUrl}/?login=1&oficina=${oficinaAlvo?.id || ''}${emailParam}`;
+  const linkAcessoDireto = oficinaAlvo
+    ? gerarLinkExclusivoLoja({
+        baseUrl: originUrl,
+        oficina: oficinaAlvo,
+        usuario: adminDestaOficina,
+      })
+    : originUrl;
 
   const handleSalvarUrlBase = (e: React.FormEvent) => {
     e.preventDefault();
@@ -425,7 +431,9 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-zinc-300 mb-1.5 flex items-center justify-between">
                   <span>Mensagem Pronta para Envio</span>
-                  <span className="text-[11px] text-emerald-400 font-medium">Link inteligente com ?oficina=</span>
+                  <span className="text-[11px] text-emerald-400 font-medium">
+                    Link exclusivo /loja/{oficinaAlvo?.slug || oficinaAlvo?.id} vinculado ao usuário
+                  </span>
                 </label>
                 <textarea
                   readOnly
@@ -483,9 +491,9 @@ export const AdminGeralView: React.FC<AdminGeralViewProps> = ({ onVoltarParaOfic
               <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm">
                 2
               </div>
-              <h3 className="font-bold text-white text-sm">Envie o Link com o ID</h3>
+              <h3 className="font-bold text-white text-sm">Envie o Link Exclusivo</h3>
               <p className="text-xs text-zinc-400">
-                O link enviado contém o parâmetro <code className="text-amber-400">?oficina=ID</code>. Ao clicar nele, o sistema abre automaticamente já sintonizado na oficina correspondente!
+                Cada loja recebe uma rota própria (<code className="text-amber-400">/loja/slug</code>) e token vinculado ao usuário. Tentativas com outro usuário ou loja são negadas!
               </p>
             </div>
 

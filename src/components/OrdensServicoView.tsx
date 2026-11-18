@@ -64,7 +64,7 @@ export const OrdensServicoView: React.FC<OrdensServicoViewProps> = ({
 
   useEffect(() => {
     carregarOrdens();
-  }, [search, filtroStatus]);
+  }, [search, filtroStatus, oficinaAtiva?.id]);
 
   const handleBaixarPDFTabela = (osItem: OrdemServico) => {
     const filename = buildOSFilename(osItem);
@@ -79,6 +79,7 @@ export const OrdensServicoView: React.FC<OrdensServicoViewProps> = ({
       const list = await OrdemServicoRepository.getAll({
         search,
         status: filtroStatus === 'TODAS' ? undefined : (filtroStatus as StatusOS),
+        oficinaId: oficinaAtiva?.id,
       });
       setOrdens(list);
     } catch (err) {

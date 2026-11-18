@@ -52,7 +52,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
   onLimparClienteInicial,
   onVoltar,
 }) => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, oficinaAtiva } = useAuth();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -109,7 +109,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
 
   useEffect(() => {
     carregarClientes();
-  }, [search]);
+  }, [search, oficinaAtiva?.id]);
 
   // Ao navegar via Busca Global para um cliente específico
   useEffect(() => {
@@ -124,7 +124,7 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
   const carregarClientes = async () => {
     setLoading(true);
     try {
-      const list = await ClienteRepository.getAll(search);
+      const list = await ClienteRepository.getAll(search, oficinaAtiva?.id);
       setClientes(list);
     } catch (err) {
       console.error('Erro ao listar clientes:', err);
@@ -186,7 +186,10 @@ export const ClientesView: React.FC<ClientesViewProps> = ({
       if (clienteEditando) {
         await ClienteRepository.update(clienteEditando.id, formData);
       } else {
-        await ClienteRepository.create(formData);
+        await ClienteRepository.create({
+          ...formData,
+          oficina_id: oficinaAtiva?.id || 'oficina_matriz',
+        });
       }
       setModalOpen(false);
       carregarClientes();

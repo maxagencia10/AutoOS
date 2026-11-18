@@ -288,16 +288,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {/* Botão Testar / Entrar como Lojista (para quem quer testar ou trocar de conta) */}
-            <button
-              type="button"
-              onClick={() => testarLoginLojista(oficinaAtiva?.id || '')}
-              className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 hover:border-amber-500/50 text-xs transition cursor-pointer shrink-0"
-              title="Abrir tela de login para entrar com usuário e senha do lojista"
-            >
-              <Key className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-[11px] font-semibold">Login Lojista</span>
-            </button>
+            {/* Botão Testar / Entrar como Lojista (Exclusivo SuperAdmin) */}
+            {isSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => testarLoginLojista(oficinaAtiva?.id || '')}
+                className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 hover:border-amber-500/50 text-xs transition cursor-pointer shrink-0"
+                title="Abrir tela de login exclusiva desta loja para testar"
+              >
+                <Key className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-[11px] font-semibold">Login Lojista</span>
+              </button>
+            )}
 
             {/* Botão Sair / Logout */}
             <button
@@ -506,16 +508,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            <button
-              onClick={() => {
-                setMenuMobileAberto(false);
-                testarLoginLojista(oficinaAtiva?.id || '');
-              }}
-              className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-amber-300 text-xs font-semibold cursor-pointer"
-            >
-              <Key className="w-4 h-4 text-amber-400" />
-              <span>Entrar / Fazer Login como Lojista</span>
-            </button>
+            {isSuperAdmin && (
+              <button
+                onClick={() => {
+                  setMenuMobileAberto(false);
+                  testarLoginLojista(oficinaAtiva?.id || '');
+                }}
+                className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-amber-300 text-xs font-semibold cursor-pointer"
+              >
+                <Key className="w-4 h-4 text-amber-400" />
+                <span>Testar Login Desta Loja</span>
+              </button>
+            )}
 
             {/* Botão Sair / Logout Mobile */}
             <button

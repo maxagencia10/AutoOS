@@ -49,6 +49,7 @@ export interface OficinaConfig {
   texto_padrao_condicoes?: string;
   condicoes_gerais?: string;
   // Campos Micro-SaaS Multi-Empresas
+  slug?: string;
   status_empresa?: StatusEmpresa;
   plano?: PlanoSaaS;
   limite_os_mensal?: number;

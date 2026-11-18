@@ -27,6 +27,7 @@ import { UsuarioRepository } from '../services/dbRepository';
 import { useAuth } from '../context/AuthContext';
 import { consultarCep, formatarCep } from '../utils/cep';
 import { formatPhone } from '../utils/formatters';
+import { gerarLinkExclusivoLoja } from '../utils/conviteSaaS';
 
 interface UsuariosViewProps {
   onVoltar?: () => void;
@@ -48,7 +49,7 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
   const usuariosExibidos = isSuperAdmin
     ? usuariosDisponiveis
     : usuariosDisponiveis.filter(
-        (u) => (u.oficina_id === oficinaAtiva?.id || !u.oficina_id) && u.perfil !== 'SUPERADMIN'
+        (u) => !!oficinaAtiva?.id && u.oficina_id === oficinaAtiva.id && u.perfil !== 'SUPERADMIN'
       );
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -185,11 +186,13 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
   const enviarAcessoWhatsApp = (u: Usuario) => {
     const of = oficinasDisponiveis.find((o) => o.id === u.oficina_id) || oficinaAtiva;
     const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app');
-    const link = `${origin}/?login=1&oficina=${u.oficina_id || of?.id || ''}&email=${encodeURIComponent(u.email)}`;
+    const link = of
+      ? gerarLinkExclusivoLoja({ baseUrl: origin, oficina: of, usuario: u })
+      : `${origin}/?login=1&oficina=${u.oficina_id || ''}&email=${encodeURIComponent(u.email)}`;
     const msg =
-      `🚗🔧 *SEU ACESSO - AUTOOS OFICINAS*\n\n` +
+      `🚗🔧 *SEU ACESSO EXCLUSIVO - AUTOOS OFICINAS*\n\n` +
       `Olá, *${u.nome}*! Seguem os dados para acessar o sistema da oficina *${of?.nome || 'Oficina'}*:\n\n` +
-      `🌐 *Link de Acesso:*\n${link}\n\n` +
+      `🌐 *Link Exclusivo da Loja (vinculado ao seu usuário):*\n${link}\n\n` +
       `👤 *Login / E-mail:* ${u.email}\n` +
       `🔑 *Senha:* ${u.senha || 'auto123'}\n` +
       `🛡️ *Perfil:* ${u.perfil}\n\n` +
@@ -208,11 +211,13 @@ export const UsuariosView: React.FC<UsuariosViewProps> = ({ onVoltar }) => {
   const copiarAcesso = (u: Usuario) => {
     const of = oficinasDisponiveis.find((o) => o.id === u.oficina_id) || oficinaAtiva;
     const origin = urlBasePublica || (typeof window !== 'undefined' ? window.location.origin : 'https://auto-os-gold.vercel.app');
-    const link = `${origin}/?login=1&oficina=${u.oficina_id || of?.id || ''}&email=${encodeURIComponent(u.email)}`;
+    const link = of
+      ? gerarLinkExclusivoLoja({ baseUrl: origin, oficina: of, usuario: u })
+      : `${origin}/?login=1&oficina=${u.oficina_id || ''}&email=${encodeURIComponent(u.email)}`;
     const msg =
-      `🚗🔧 *ACESSO AUTOOS*\n` +
+      `🚗🔧 *ACESSO EXCLUSIVO AUTOOS*\n` +
       `Oficina: ${of?.nome || 'Oficina'}\n` +
-      `Link: ${link}\n` +
+      `Link Exclusivo: ${link}\n` +
       `Login: ${u.email}\n` +
       `Senha: ${u.senha || 'auto123'}\n` +
       `Perfil: ${u.perfil}`;

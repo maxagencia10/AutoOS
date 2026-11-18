@@ -115,13 +115,13 @@ export const NovaOrdemServicoModal: React.FC<NovaOrdemServicoModalProps> = ({
   // Carrega dados iniciais
   useEffect(() => {
     carregarDependencias();
-  }, []);
+  }, [oficinaAtiva?.id]);
 
   const carregarDependencias = async () => {
     try {
       const [clis, ofi] = await Promise.all([
-        ClienteRepository.getAll(),
-        OficinaRepository.get(),
+        ClienteRepository.getAll('', oficinaAtiva?.id),
+        OficinaRepository.get(oficinaAtiva?.id),
       ]);
       setClientes(clis);
       setOficina(ofi);
